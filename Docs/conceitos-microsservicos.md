@@ -1,6 +1,7 @@
 # Conceitos de Arquitetura de Microsserviços
 
 > Material de apoio teórico | Trabalho de Faculdade — Web I
+> Stack: NestJS + MongoDB + Docker + JWT + Prometheus/Grafana
 
 ---
 
@@ -45,7 +46,7 @@ Cada microsserviço roda em seu próprio **container Docker**. Um container é c
 │  └─────────────────┘    └─────────────────┘             │
 │                                                         │
 │  ┌─────────────────┐    ┌─────────────────┐             │
-│  │ event-service   │    │ ticket-service  │             │
+│  │  servico-a      │    │  servico-b      │             │
 │  │  porta: 3002    │    │  porta: 3003    │             │
 │  └─────────────────┘    └─────────────────┘             │
 │                                                         │
@@ -62,7 +63,47 @@ Dentro dessa rede, os containers se comunicam pelo **nome do serviço**. O api-g
 
 ---
 
-## 3. Componentes da arquitetura
+## 3. NestJS — o framework de cada serviço
+
+Cada serviço é uma aplicação NestJS independente. O NestJS organiza o código em três peças principais:
+
+- **Module** — agrupa tudo que pertence a um domínio (controllers, services, imports)
+- **Controller** — recebe as requisições HTTP e define as rotas
+- **Provider/Service** — contém a lógica de negócio e acesso ao banco
+
+```typescript
+// Exemplo de estrutura de um módulo
+@Module({
+  imports: [MongooseModule.forFeature([{ name: 'Recurso', schema: RecursoSchema }])],
+  controllers: [RecursoController],
+  providers: [RecursoService],
+})
+export class RecursoModule {}
+```
+
+```typescript
+// Controller define as rotas
+@Controller('recursos')
+export class RecursoController {
+  constructor(private readonly recursoService: RecursoService) {}
+
+  @Get()
+  findAll() {
+    return this.recursoService.findAll();
+  }
+
+  @Post()
+  create(@Body() createRecursoDto: CreateRecursoDto) {
+    return this.recursoService.create(createRecursoDto);
+  }
+}
+```
+
+O NestJS usa **injeção de dependência**: o service é passado automaticamente pelo framework para o controller via constructor — você não instancia nada manualmente.
+
+---
+
+## 4. Componentes da arquitetura
 
 ### API Gateway
 
@@ -70,14 +111,14 @@ O Gateway é o **único ponto de entrada** da aplicação. O mundo externo (Post
 
 Responsabilidades:
 1. **Receber** todas as requisições externas
-2. **Validar o JWT** — token inválido é rejeitado aqui mesmo
-3. **Rotear** para o serviço correto com base na URL
+2. **Validar o JWT** via Guard — token inválido é rejeitado aqui mesmo
+3. **Rotear** para o serviço correto com base na URL, repassando a requisição com `HttpService`
 4. **Repassar** informações do usuário nos headers internos (`x-user-id`, `x-user-role`)
 
 ```
 POST /auth/login    → http://auth-service:3001/login
-GET  /events        → http://event-service:3002/events
-POST /tickets       → http://ticket-service:3003/tickets
+GET  /recurso-a     → http://servico-a:3002/recurso-a
+POST /recurso-b     → http://servico-b:3003/recurso-b
 ```
 
 O cliente nunca sabe que existem múltiplos serviços. Para ele, tudo vem de `localhost:3000`.
@@ -85,18 +126,18 @@ O cliente nunca sabe que existem múltiplos serviços. Para ele, tudo vem de `lo
 ### Auth Service
 
 Responsável por tudo relacionado a identidade:
-- Registrar usuário (`POST /register`)
-- Fazer login e devolver JWT (`POST /login`)
+- Registrar usuário (`POST /auth/register`)
+- Fazer login e devolver JWT (`POST /auth/login`)
 
 É o **único** serviço que conhece o `JWT_SECRET`. Os outros serviços não validam token — quem faz isso é o Gateway.
 
 ### Serviços de negócio
 
-Implementam a lógica da aplicação. Não validam JWT — confiam que, se a requisição chegou, o Gateway já autenticou. Usam o `x-user-id` repassado para saber quem é o usuário.
+Implementam a lógica da aplicação. Não validam JWT — confiam que, se a requisição chegou, o Gateway já autenticou. Usam o `x-user-id` e `x-user-role` repassados nos headers para saber quem é o usuário e o que ele pode fazer.
 
 ---
 
-## 4. Fluxo completo de uma requisição
+## 5. Fluxo completo de uma requisição
 
 ### Login (rota pública)
 
@@ -112,29 +153,29 @@ Implementam a lógica da aplicação. Não validam JWT — confiam que, se a req
 ### Requisição autenticada
 
 ```
-1. Cliente → GET localhost:3000/tickets
+1. Cliente → GET localhost:3000/recurso-a
    Header: Authorization: Bearer eyJ...
 
-2. Gateway extrai o token do header
-3. Gateway verifica a assinatura com JWT_SECRET
-   → Token inválido: retorna 401, para aqui
+2. Guard do Gateway intercepta a requisição
+3. Guard verifica o token com JwtService
+   → Token inválido: lança UnauthorizedException (401), para aqui
    → Token válido: decodifica { userId: "abc123", role: "user" }
 
-4. Gateway adiciona headers internos:
+4. Guard adiciona headers internos na requisição de saída:
    x-user-id: abc123
    x-user-role: user
 
-5. Gateway repassa → http://ticket-service:3003/tickets
+5. Gateway repassa → http://servico-a:3002/recurso-a
 
-6. ticket-service lê req.headers['x-user-id']
-7. ticket-service consulta MongoDB, retorna os dados
+6. servico-a lê req.headers['x-user-id']
+7. servico-a consulta MongoDB, retorna os dados
 
 8. Gateway devolve a resposta para o cliente
 ```
 
 ---
 
-## 5. JWT — como o token funciona
+## 6. JWT — como o token funciona
 
 O JWT (JSON Web Token) tem 3 partes separadas por `.`:
 
@@ -147,15 +188,109 @@ eyJhbGciOiJIUzI1NiJ9 . eyJ1c2VySWQiOiIxMjMifQ . assinatura
 - **Payload** — dados do usuário. É decodificável por qualquer um, **não coloque senha aqui**
 - **Signature** — garante que o token não foi adulterado. Só quem tem o `JWT_SECRET` consegue criar uma assinatura válida
 
-O que acontece na validação:
-1. Gateway extrai `Bearer eyJ...`
-2. Chama `jsonwebtoken.verify(token, JWT_SECRET)`
-3. Se a assinatura bater → retorna o payload decodificado
-4. Se não bater (token adulterado ou expirado) → lança erro → responde 401
+No NestJS, a validação do JWT no Gateway é feita por um **Guard**:
+
+```typescript
+@Injectable()
+export class JwtAuthGuard implements CanActivate {
+  constructor(private jwtService: JwtService) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
+    const token = request.headers.authorization?.split(' ')[1];
+
+    if (!token) throw new UnauthorizedException();
+
+    try {
+      const payload = this.jwtService.verify(token);
+      // injeta nas headers que serão repassadas ao serviço destino
+      request.userPayload = payload;
+      return true;
+    } catch {
+      throw new UnauthorizedException();
+    }
+  }
+}
+```
+
+`UnauthorizedException` do NestJS retorna automaticamente o status **401**.
 
 ---
 
-## 6. Observabilidade — Prometheus e Grafana
+## 7. Autorização — controlando o que cada usuário pode fazer
+
+Autenticação responde "quem é você?". Autorização responde "o que você pode fazer?".
+
+O JWT carrega um campo `role` no payload (ex: `"role": "admin"` ou `"role": "user"`). O Gateway repassa esse valor no header `x-user-role`. Os serviços de negócio usam um **Guard de roles** para decidir se a operação é permitida.
+
+A diferença entre os status:
+- **401 Unauthorized** — token ausente ou inválido (não autenticado)
+- **403 Forbidden** — token válido, mas sem permissão para aquela ação (não autorizado)
+
+No NestJS, cria-se um decorator customizado e um Guard:
+
+```typescript
+// decorator para marcar a role exigida na rota
+export const Roles = (role: string) => SetMetadata('role', role);
+
+// guard que lê o header x-user-role e compara com a role exigida
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const requiredRole = this.reflector.get<string>('role', context.getHandler());
+    if (!requiredRole) return true; // rota sem @Roles() é livre
+
+    const request = context.switchToHttp().getRequest();
+    const userRole = request.headers['x-user-role'];
+
+    if (userRole !== requiredRole) throw new ForbiddenException();
+    return true;
+  }
+}
+```
+
+Uso no controller:
+
+```typescript
+@Delete(':id')
+@Roles('admin')
+@UseGuards(RolesGuard)
+remove(@Param('id') id: string) {
+  return this.recursoService.remove(id);
+}
+```
+
+---
+
+## 8. Comunicação HTTP entre serviços
+
+Quando um serviço precisa chamar outro internamente, usa o `HttpModule` do NestJS (`@nestjs/axios`):
+
+```typescript
+// No module do serviço que vai fazer a chamada:
+@Module({
+  imports: [HttpModule],
+  ...
+})
+
+// No service:
+constructor(private readonly httpService: HttpService) {}
+
+async buscarRecursoExterno(id: string) {
+  const { data } = await firstValueFrom(
+    this.httpService.get(`${process.env.SERVICO_A_URL}/recurso/${id}`)
+  );
+  return data;
+}
+```
+
+A variável `SERVICO_A_URL` vale `http://servico-a:3002` dentro do Docker e `http://localhost:3002` no desenvolvimento local.
+
+---
+
+## 9. Observabilidade — Prometheus e Grafana
 
 ### O que é observabilidade?
 
@@ -169,10 +304,29 @@ O que acontece na validação:
 
 Prometheus funciona no modelo **pull**: periodicamente vai nos serviços buscar métricas no endpoint `/metrics`.
 
-Em cada serviço Node.js, a lib `prom-client` expõe automaticamente esse endpoint com dados de CPU, memória, contagem e latência de requisições HTTP.
+Em cada serviço NestJS, a lib `prom-client` expõe esse endpoint. A forma mais direta é registrá-lo manualmente no `main.ts`:
+
+```typescript
+import { collectDefaultMetrics, Registry } from 'prom-client';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  const register = new Registry();
+  collectDefaultMetrics({ register });
+
+  // endpoint que o Prometheus vai chamar
+  app.getHttpAdapter().get('/metrics', async (req, res) => {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  });
+
+  await app.listen(3001);
+}
+```
 
 ```
-Serviço Node.js        Prometheus            Grafana
+Serviço NestJS         Prometheus            Grafana
   GET /metrics  ◄──── coleta a cada 15s ◄── consulta e exibe
 ```
 
@@ -193,7 +347,7 @@ O Grafana lê do Prometheus e exibe dashboards com gráficos em tempo real.
 
 ---
 
-## 7. Testes de carga com k6
+## 10. Testes de carga com k6
 
 O k6 simula múltiplos usuários fazendo requisições simultâneas. Você define quantos usuários virtuais, por quanto tempo, e o que cada usuário faz.
 
@@ -214,7 +368,7 @@ O objetivo na apresentação é rodar o k6 enquanto o Grafana exibe os gráficos
 
 ---
 
-## 8. Por que separar domínios?
+## 11. Por que separar domínios?
 
 Para justificar o uso de microsserviços, os domínios precisam ser **naturalmente independentes**. A divisão mínima esperada é:
 
@@ -229,88 +383,66 @@ Cada um pode evoluir, ser deployado e escalar independentemente. Se um serviço 
 
 ---
 
-## 9. Autorização — controlando o que cada usuário pode fazer
+## 12. Documentação com Swagger
 
-Autenticação responde "quem é você?". Autorização responde "o que você pode fazer?".
+O `@nestjs/swagger` gera uma página interativa automaticamente a partir dos decorators já usados no código — sem precisar escrever YAML ou comentários separados.
 
-O JWT carrega um campo `role` no payload (ex: `"role": "admin"` ou `"role": "user"`). O Gateway repassa esse valor no header `x-user-role`. Os serviços usam esse header para decidir se a operação é permitida.
+A configuração fica no `main.ts` do **api-gateway**:
 
-**Exemplo prático:** só um `admin` pode deletar um recurso.
+```typescript
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
-```
-1. Usuário comum tenta DELETE /recursos/123
-   Authorization: Bearer eyJ... (role: "user")
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
 
-2. Gateway valida o token → repassa x-user-role: user
+  const config = new DocumentBuilder()
+    .setTitle('API Gateway')
+    .setDescription('Documentação centralizada dos microsserviços')
+    .setVersion('1.0')
+    .addBearerAuth() // habilita o campo de token na UI
+    .build();
 
-3. Serviço recebe a requisição
-4. Verifica req.headers['x-user-role'] === 'admin'
-5. Não é admin → retorna 403 Forbidden
-```
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api-docs', app, document);
 
-A diferença entre os status:
-- **401 Unauthorized** — token ausente ou inválido (não autenticado)
-- **403 Forbidden** — token válido, mas sem permissão para aquela ação (não autorizado)
-
-Na prática, o middleware de autorização em cada serviço fica assim:
-
-```javascript
-function requireRole(role) {
-  return (req, res, next) => {
-    if (req.headers['x-user-role'] !== role) {
-      return res.status(403).json({ error: 'Acesso negado' });
-    }
-    next();
-  };
+  await app.listen(3000);
 }
-
-// Uso na rota:
-router.delete('/:id', requireRole('admin'), deleteRecurso);
 ```
+
+Nos controllers, decorators descrevem cada endpoint:
+
+```typescript
+@ApiTags('auth')
+@Controller('auth')
+export class AuthController {
+
+  @ApiOperation({ summary: 'Autenticar usuário' })
+  @ApiResponse({ status: 200, description: 'Token JWT gerado' })
+  @ApiResponse({ status: 401, description: 'Credenciais inválidas' })
+  @Post('login')
+  login(@Body() loginDto: LoginDto) {}
+}
+```
+
+Nos DTOs, os campos ficam documentados automaticamente com `@ApiProperty`:
+
+```typescript
+export class LoginDto {
+  @ApiProperty({ example: 'usuario@email.com' })
+  email: string;
+
+  @ApiProperty({ example: '123456' })
+  password: string;
+}
+```
+
+Resultado: `localhost:3000/api-docs` exibe a documentação interativa completa.
+
+O mínimo esperado: descrição de cada endpoint, campos de entrada com tipos, respostas possíveis e quais rotas exigem token (cadeado na UI).
 
 ---
 
-## 10. Documentação com Swagger
-
-Swagger (OpenAPI) gera uma página interativa onde qualquer pessoa pode ver todos os endpoints da API, os parâmetros esperados e testar as requisições direto pelo browser — sem precisar do Postman.
-
-No projeto, a documentação fica centralizada no **api-gateway**, que agrega as rotas de todos os serviços em um único lugar.
-
-```
-localhost:3000/api-docs   →   página do Swagger com todos os endpoints
-```
-
-Com a lib `swagger-ui-express` + `swagger-jsdoc`, você descreve cada rota em comentários JSDoc:
-
-```javascript
-/**
- * @swagger
- * /auth/login:
- *   post:
- *     summary: Autenticar usuário
- *     requestBody:
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             properties:
- *               email:
- *                 type: string
- *               password:
- *                 type: string
- *     responses:
- *       200:
- *         description: Token JWT gerado
- *       401:
- *         description: Credenciais inválidas
- */
-```
-
-O mínimo esperado na documentação é: descrição de cada endpoint, parâmetros de entrada, respostas possíveis e quais rotas precisam de token.
-
----
-
-## 11. Deploy
+## 13. Deploy
 
 O projeto precisa funcionar em algum ambiente além da máquina de desenvolvimento. As opções são deploy local (via docker-compose na própria máquina) ou em nuvem.
 
@@ -327,7 +459,7 @@ docker-compose up -d
 
 ### Deploy em nuvem
 
-Para expor a aplicação na internet, as plataformas mais simples para Node.js + Docker são:
+Para expor a aplicação na internet, as plataformas mais simples para NestJS + Docker são:
 
 | Plataforma | O que oferece | Observação |
 |---|---|---|
