@@ -195,7 +195,7 @@ O Grafana lê do Prometheus e exibe dashboards com gráficos em tempo real.
 
 ## 7. Testes de carga com k6
 
-O k6 simula múltiplos usuários fazendo requisições simultâneas. Você define quantos usuários virtuais, por quanto tempo, e o que cada um faz.
+O k6 simula múltiplos usuários fazendo requisições simultâneas. Você define quantos usuários virtuais, por quanto tempo, e o que cada usuário faz.
 
 **Exemplo conceitual de script:**
 
@@ -203,26 +203,142 @@ O k6 simula múltiplos usuários fazendo requisições simultâneas. Você defin
 Por 30 segundos, com 50 usuários simultâneos:
   1. Faz POST /auth/login
   2. Pega o token da resposta
-  3. Faz GET /events com o token
-  4. Faz POST /tickets reservando um ingresso
+  3. Faz GET no recurso principal com o token
+  4. Faz POST criando um recurso autenticado
   5. Verifica se as respostas foram 200/201
 
 Critério de sucesso: 95% das requisições abaixo de 500ms
 ```
 
-O objetivo na apresentação é rodar o k6 enquanto o Grafana exibe os gráficos de métricas subindo em tempo real — isso demonstra que a observabilidade está funcionando.
+O objetivo na apresentação é rodar o k6 enquanto o Grafana exibe os gráficos de métricas subindo em tempo real — isso demonstra que autenticação, serviços e observabilidade estão funcionando de ponta a ponta.
 
 ---
 
 ## 8. Por que separar domínios?
 
-Para justificar o uso de microsserviços, os domínios precisam ser **naturalmente independentes**. No sistema de eventos deste projeto:
+Para justificar o uso de microsserviços, os domínios precisam ser **naturalmente independentes**. A divisão mínima esperada é:
 
 | Serviço | Domínio | Responsabilidade |
 |---------|---------|-----------------|
-| auth-service | Identidade | Quem é o usuário |
-| event-service | Eventos | O que existe para comprar |
-| ticket-service | Ingressos | O que o usuário comprou |
 | api-gateway | Entrada | Como o mundo acessa tudo |
+| auth-service | Identidade | Quem é o usuário |
+| serviço de negócio A | Domínio principal | Recurso central da aplicação |
+| serviço de negócio B | Domínio relacionado | Recurso que depende ou complementa A |
 
-Cada um pode evoluir, ser deployado e escalar independentemente. Se o event-service cair, o login ainda funciona. Se o ticket-service precisar de mais recursos em dia de venda, só ele é escalado.
+Cada um pode evoluir, ser deployado e escalar independentemente. Se um serviço de negócio cair, o login ainda funciona. Se um serviço específico precisar de mais recursos, só ele é escalado.
+
+---
+
+## 9. Autorização — controlando o que cada usuário pode fazer
+
+Autenticação responde "quem é você?". Autorização responde "o que você pode fazer?".
+
+O JWT carrega um campo `role` no payload (ex: `"role": "admin"` ou `"role": "user"`). O Gateway repassa esse valor no header `x-user-role`. Os serviços usam esse header para decidir se a operação é permitida.
+
+**Exemplo prático:** só um `admin` pode deletar um recurso.
+
+```
+1. Usuário comum tenta DELETE /recursos/123
+   Authorization: Bearer eyJ... (role: "user")
+
+2. Gateway valida o token → repassa x-user-role: user
+
+3. Serviço recebe a requisição
+4. Verifica req.headers['x-user-role'] === 'admin'
+5. Não é admin → retorna 403 Forbidden
+```
+
+A diferença entre os status:
+- **401 Unauthorized** — token ausente ou inválido (não autenticado)
+- **403 Forbidden** — token válido, mas sem permissão para aquela ação (não autorizado)
+
+Na prática, o middleware de autorização em cada serviço fica assim:
+
+```javascript
+function requireRole(role) {
+  return (req, res, next) => {
+    if (req.headers['x-user-role'] !== role) {
+      return res.status(403).json({ error: 'Acesso negado' });
+    }
+    next();
+  };
+}
+
+// Uso na rota:
+router.delete('/:id', requireRole('admin'), deleteRecurso);
+```
+
+---
+
+## 10. Documentação com Swagger
+
+Swagger (OpenAPI) gera uma página interativa onde qualquer pessoa pode ver todos os endpoints da API, os parâmetros esperados e testar as requisições direto pelo browser — sem precisar do Postman.
+
+No projeto, a documentação fica centralizada no **api-gateway**, que agrega as rotas de todos os serviços em um único lugar.
+
+```
+localhost:3000/api-docs   →   página do Swagger com todos os endpoints
+```
+
+Com a lib `swagger-ui-express` + `swagger-jsdoc`, você descreve cada rota em comentários JSDoc:
+
+```javascript
+/**
+ * @swagger
+ * /auth/login:
+ *   post:
+ *     summary: Autenticar usuário
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Token JWT gerado
+ *       401:
+ *         description: Credenciais inválidas
+ */
+```
+
+O mínimo esperado na documentação é: descrição de cada endpoint, parâmetros de entrada, respostas possíveis e quais rotas precisam de token.
+
+---
+
+## 11. Deploy
+
+O projeto precisa funcionar em algum ambiente além da máquina de desenvolvimento. As opções são deploy local (via docker-compose na própria máquina) ou em nuvem.
+
+### Deploy local
+
+É o mais simples e suficiente para a apresentação. Qualquer pessoa que clonar o repositório consegue subir tudo com:
+
+```bash
+git clone https://github.com/seu-usuario/projeto.git
+cd projeto
+cp .env.example .env   # preencher as variáveis
+docker-compose up -d
+```
+
+### Deploy em nuvem
+
+Para expor a aplicação na internet, as plataformas mais simples para Node.js + Docker são:
+
+| Plataforma | O que oferece | Observação |
+|---|---|---|
+| **Render** | deploy de containers Docker, plano gratuito | boa opção para o projeto |
+| **Railway** | deploy via GitHub, suporte a MongoDB | simples de configurar |
+| **Fly.io** | containers Docker, boa performance | requer cartão de crédito no cadastro |
+
+O fluxo geral em qualquer uma delas:
+1. Fazer push do código para o GitHub
+2. Conectar o repositório na plataforma
+3. Configurar as variáveis de ambiente (`.env`) no painel da plataforma
+4. A plataforma lê o `Dockerfile` e faz o build automaticamente
+
+Para o trabalho, deploy local já é suficiente. Se quiser deixar acessível para o avaliador testar remotamente, Render ou Railway são as opções mais rápidas de configurar.

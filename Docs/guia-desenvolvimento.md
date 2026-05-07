@@ -8,7 +8,6 @@
 
 ### Planejamento
 - [ ] Escolher o tema e definir os domínios de cada serviço
-- [ ] Decidir a stack (linguagem, framework, banco de dados)
 - [ ] Mapear os endpoints de cada serviço
 - [ ] Dividir responsabilidades entre o time
 
@@ -26,14 +25,15 @@
 - [ ] Endpoint `/metrics` exposto
 
 ### API Gateway
-- [ ] Validação de JWT
+- [ ] Validação de JWT (retorna 401 se token inválido ou ausente)
 - [ ] Roteamento para todos os serviços
 - [ ] Headers internos repassados (`x-user-id`, `x-user-role`)
-- [ ] Documentação Swagger centralizada
+- [ ] Documentação Swagger em `/api-docs` cobrindo todos os endpoints
 - [ ] Endpoint `/metrics` exposto
 
 ### Serviços de negócio
 - [ ] Cada serviço com seu CRUD implementado
+- [ ] Rotas protegidas por role (403 para quem não tem permissão)
 - [ ] Regras de negócio do domínio funcionando
 - [ ] Comunicação entre serviços onde necessário
 - [ ] Endpoint `/metrics` exposto em cada um
@@ -43,8 +43,14 @@
 - [ ] Dashboard no Grafana com requisições/s, latência e erros
 - [ ] Script de teste de carga (k6) cobrindo o fluxo principal
 
+### Deploy
+- [ ] `docker-compose up` sobe tudo a partir de um clone limpo do repositório
+- [ ] `.env.example` preenchido o suficiente para qualquer pessoa rodar o projeto
+- [ ] (opcional) serviços publicados em nuvem (Render, Railway, etc.)
+
 ### Apresentação
 - [ ] Fluxo completo funcionando via Gateway
+- [ ] Swagger acessível mostrando todos os endpoints documentados
 - [ ] k6 rodando ao vivo com métricas aparecendo no Grafana
 
 ---
@@ -225,7 +231,7 @@ services:
       - servico-a
 
   database:
-    image: mongo:7           # trocar se escolher outro banco
+    image: mongo:7
     ports:
       - "27017:27017"
     volumes:
