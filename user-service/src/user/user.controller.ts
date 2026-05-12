@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  BadRequestException,
 } from '@nestjs/common';
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
@@ -17,6 +18,11 @@ export class UserController {
 
   @Post()
   create(@Body() createUserDto: CreateUserDto) {
+    const { name, email, password } = createUserDto;
+
+    if (!name || !email || !password) {
+      throw new BadRequestException('Campos obrigatórios faltando!');
+    }
     return this.userService.create(createUserDto);
   }
 
