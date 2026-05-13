@@ -1,0 +1,29 @@
+services:
+  # Api Gateway (0)
+
+  # Serviço de usuários (1)
+  users-app:
+    build:
+      context: ./user-service
+      target: development
+    env_file:
+      - ./user-service/.env
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./user-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - users-db
+
+  users-db:
+    image: mongo
+    env_file:
+      - ./user-service/.env
+    volumes:
+      - users-data:/data/db
+
+  # Serviço de Autenticação (2)
+
+volumes:
+  users-data:
