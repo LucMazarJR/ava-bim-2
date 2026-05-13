@@ -1,8 +1,13 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './schema/user.schema';
-import { Model } from 'mongoose';
+import { Error, Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
 
 interface MongoError {
@@ -27,19 +32,60 @@ export class UserService {
     }
   }
 
-  findAll() {
-    return `This action returns all user`;
+  async findAll() {
+    return await this.userModel.find();
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} user`;
+  async findOne(id: string) {
+    try {
+      const user = await this.userModel.find({ _id: id });
+      if (!user) {
+        throw new NotFoundException('Usuário não encontrado');
+      }
+      return user;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id invalido');
+      }
+      throw error;
+    }
   }
 
-  update(id: number, updateUserDto: UpdateUserDto) {
-    return `This action updates a #${id} user`;
+  async update(id: string, updateUserDto: UpdateUserDto) {
+    try {
+      const updatedUser = await this.userModel.findByIdAndUpdate(
+        id,
+        updateUserDto,
+        { new: true },
+      );
+      if (!updatedUser) {
+        throw new NotFoundException('Usuário nao encontrado');
+      }
+      return updatedUser;
+    } catch (error) {
+      const { code, keyValue } = error as MongoError;
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id invalido');
+      }
+      if (code === 11000 && keyValue) {
+        throw new ConflictException('Email já cadastrado');
+      }
+      throw error;
+    }
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} user`;
+  async remove(id: string) {
+    try {
+      const deletedUser = await this.userModel.findByIdAndDelete(id);
+      if (!deletedUser) {
+        throw new NotFoundException('Usuário não encontrado');
+      }
+      return deletedUser;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 }
