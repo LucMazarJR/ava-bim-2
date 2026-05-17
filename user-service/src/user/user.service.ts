@@ -39,7 +39,7 @@ export class UserService {
     return await this.userModel.find();
   }
 
-  async findOne(id: string) {
+  async findById(id: string) {
     try {
       const user = await this.userModel.find({ _id: id });
       if (!user) {
@@ -52,6 +52,14 @@ export class UserService {
       }
       throw error;
     }
+  }
+
+  async findByEmail(email: string) {
+    const user = await this.userModel.findOne({ email: email });
+    if (!user) {
+      throw new NotFoundException('Usuário não encontrado');
+    }
+    return user;
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
