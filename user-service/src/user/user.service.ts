@@ -9,6 +9,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './schema/user.schema';
 import { Error, Model } from 'mongoose';
 import { InjectModel } from '@nestjs/mongoose';
+import bcrypt from 'bcrypt';
 
 interface MongoError {
   code?: number;
@@ -21,6 +22,8 @@ export class UserService {
 
   async create(createUserDto: CreateUserDto): Promise<User> {
     try {
+      const bcryptedPassword = await bcrypt.hash(createUserDto.password, 10);
+      createUserDto.password = bcryptedPassword;
       const createdUser = new this.userModel(createUserDto);
       return await createdUser.save();
     } catch (error) {
