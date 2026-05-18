@@ -30,12 +30,14 @@ services:
     build:
       context: ./auth_service
       target: development
+    env_file:
+      - ./auth-service/.env
     environment:
       - CHOKIDAR_USEPOLLING=true
     ports:
       - "3002:3000"
     volumes:
-      - ./auth_service:/usr/src/app
+      - ./auth-service:/usr/src/app
       - /usr/src/app/node_modules
 
 volumes:
