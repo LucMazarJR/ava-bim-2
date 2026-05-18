@@ -28,7 +28,7 @@ services:
   # Serviço de Autenticação (2)
   auth-app:
     build:
-      context: ./auth_service
+      context: ./auth-service
       target: development
     env_file:
       - ./auth-service/.env
