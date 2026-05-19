@@ -6,9 +6,11 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './guards/src.guard';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { HttpModule } from '@nestjs/axios';
 
 @Module({
   imports: [
+    HttpModule,
     JwtModule.register({
       global: true,
       secret: process.env.JWT_SECRET,
