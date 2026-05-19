@@ -8,6 +8,8 @@ services:
       target: development
     env_file:
       - ./user-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
     ports:
       - "3001:3000"
     volumes:
@@ -24,6 +26,19 @@ services:
       - users-data:/data/db
 
   # Serviço de Autenticação (2)
+  auth-app:
+    build:
+      context: ./auth-service
+      target: development
+    env_file:
+      - ./auth-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./auth-service:/usr/src/app
+      - /usr/src/app/node_modules
 
 volumes:
   users-data:

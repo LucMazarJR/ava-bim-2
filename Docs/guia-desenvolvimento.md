@@ -237,25 +237,31 @@ git push origin feature/nome-do-servico
 
 ### Dockerfile para serviços NestJS
 
-O NestJS é TypeScript — precisa de um **passo de build** que compila para JavaScript na pasta `dist/`. O Dockerfile usa multi-stage build para isso: o primeiro estágio compila, o segundo roda apenas o código compilado (imagem menor).
+O projeto usa **dois estágios** no Dockerfile: `development` (com hot reload) e `production` (compilado, imagem menor). O `docker-compose.yml` seleciona o estágio via `target`.
 
 ```dockerfile
-# Estágio 1: compilar o TypeScript
-FROM node:20-alpine AS builder
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
+# Estágio de desenvolvimento — hot reload ativo
+FROM node:22-alpine AS development
 
-# Estágio 2: imagem final só com o necessário para rodar
-FROM node:20-alpine
-WORKDIR /app
+WORKDIR /usr/src/app
+
 COPY package*.json ./
-RUN npm install --omit=dev
-COPY --from=builder /app/dist ./dist
-EXPOSE 3001
-CMD ["node", "dist/main"]
+
+RUN npm install
+
+COPY . .
+
+# npm install roda novamente ao iniciar para pegar dependências novas
+# sem precisar recriar a imagem
+CMD ["sh", "-c", "npm install && npm run start:dev"]
+
+# [TODO] - Adicionar estágio de produção:
+# FROM node:22-alpine AS production
+# WORKDIR /usr/src/app
+# COPY package*.json ./
+# RUN npm install --omit=dev
+# COPY --from=development /usr/src/app/dist ./dist
+# CMD ["node", "dist/main"]
 ```
 
 Troque a porta (`EXPOSE`) conforme o serviço. Defina as portas no início do projeto e alinhe com o time.
@@ -266,41 +272,51 @@ Troque a porta (`EXPOSE`) conforme o serviço. Defina as portas no início do pr
 services:
 
   api-gateway:
-    build: ./api-gateway
+    build:
+      context: ./api-gateway
+      target: development        # usa o estágio de dev do Dockerfile
     ports:
       - "3000:3000"
     environment:
+      - CHOKIDAR_USEPOLLING=true # necessário no Windows — o Docker não repassa eventos
+                                 # de arquivo do host, então o watcher usa polling
       - JWT_SECRET=${JWT_SECRET}
       - SERVICO_A_URL=http://servico-a:3002
       - SERVICO_B_URL=http://servico-b:3003
+    volumes:
+      - ./api-gateway:/usr/src/app        # monta o código do host → hot reload funciona
+      - /usr/src/app/node_modules         # volume anônimo: protege o node_modules do container
     depends_on:
       - auth-service
       - servico-a
       - servico-b
 
   auth-service:
-    build: ./auth-service
+    build:
+      context: ./auth-service
+      target: development
     environment:
+      - CHOKIDAR_USEPOLLING=true
       - MONGO_URI=${MONGO_URI}
       - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./auth-service:/usr/src/app
+      - /usr/src/app/node_modules
     depends_on:
       - database
 
   servico-a:
-    build: ./servico-a
+    build:
+      context: ./servico-a
+      target: development
     environment:
+      - CHOKIDAR_USEPOLLING=true
       - MONGO_URI=${MONGO_URI}
+    volumes:
+      - ./servico-a:/usr/src/app
+      - /usr/src/app/node_modules
     depends_on:
       - database
-
-  servico-b:
-    build: ./servico-b
-    environment:
-      - MONGO_URI=${MONGO_URI}
-      - SERVICO_A_URL=http://servico-a:3002
-    depends_on:
-      - database
-      - servico-a
 
   database:
     image: mongo:7
@@ -327,6 +343,30 @@ volumes:
   db-data:
 ```
 
+> **Por que dois volumes por serviço?**
+> - `./servico:/usr/src/app` — sincroniza o código do host com o container em tempo real (hot reload)
+> - `/usr/src/app/node_modules` — volume anônimo que "blinda" a pasta `node_modules` dentro do container, impedindo que o `node_modules` local do Windows sobrescreva o que foi instalado no Linux alpine
+>
+> **Por que `CHOKIDAR_USEPOLLING=true`?**
+> No Windows, o Docker Desktop não propaga eventos `inotify` do filesystem do host para o container Linux. Ferramentas que usam `chokidar` (como alguns middlewares de watch) respeitam essa variável e passam a usar polling. Porém, essa variável **não afeta o `nest start --watch`**, pois ele usa o compilador TypeScript diretamente, que tem seu próprio sistema de watch.
+>
+> **Por que adicionar `watchOptions` no `tsconfig.json`?**
+> O `nest start --watch` usa o TypeScript Compiler em modo watch, que por padrão depende de `inotify` — eventos que nunca chegam dentro do container quando os arquivos estão num volume montado do Windows. Para corrigir, é necessário configurar o TypeScript para usar polling:
+>
+> ```json
+> // tsconfig.json — adicionar fora de "compilerOptions"
+> "watchOptions": {
+>   "watchFile": "fixedPollingInterval",
+>   "watchDirectory": "fixedPollingInterval",
+>   "fallbackPolling": "fixedinterval"
+> }
+> ```
+>
+> Com isso, o compilador verifica os arquivos em intervalos fixos em vez de esperar por eventos do sistema operacional. Esse bloco deve estar presente no `tsconfig.json` de **cada serviço** que rode dentro do Docker em modo watch.
+>
+> **Por que `npm install` no CMD?**
+> Com o volume montado, o `package.json` do host fica visível no container. Toda vez que o container sobe, ele instala as dependências novas automaticamente — sem precisar recriar a imagem ao adicionar um pacote.
+
 ### Arquivo .env na raiz
 
 ```
@@ -342,23 +382,29 @@ Nunca commite o `.env` — ele já está no `.gitignore`. Cada membro cria o seu
 
 ```bash
 # Subir todos os containers em background
-docker-compose up -d
+docker compose up -d
 
 # Ver os logs de um serviço específico
-docker-compose logs -f nome-do-servico
+docker compose logs -f nome-do-servico
 
 # Parar tudo
-docker-compose down
+docker compose down
 
 # Parar e apagar os volumes (reseta o banco)
-docker-compose down -v
+docker compose down -v
 
-# Rebuild de um serviço após mudança de código
-docker-compose up -d --build nome-do-servico
+# Rebuild de uma imagem (necessário ao mudar o Dockerfile)
+docker compose up -d --build nome-do-servico
 
 # Ver status dos containers
-docker-compose ps
+docker compose ps
 ```
+
+> **Quando precisar de `--build`?**
+> Com o setup de volumes + `npm install` no CMD, a maioria das situações **não** exige rebuild:
+> - **Mudança de código** → hot reload cuida automaticamente
+> - **Nova dependência** (`npm install pacote`) → basta reiniciar o container: `docker compose restart nome-do-servico`
+> - **Mudança no Dockerfile** → aí sim precisa do `--build`
 
 ---
 
