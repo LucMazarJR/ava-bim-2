@@ -1,5 +1,18 @@
 services:
   # Api Gateway (0)
+  gateway-app:
+    build:
+      context: ./api-gateway
+      target: development
+    env_file:
+      - ./api-gateway/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./api-gateway:/usr/src/app
+      - /usr/src/app/node_modules
 
   # Serviço de usuários (1)
   users-app:
