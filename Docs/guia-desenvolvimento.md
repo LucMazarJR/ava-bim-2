@@ -274,10 +274,10 @@ git push origin user
 
 ### Dockerfile
 
-Cada serviço tem seu próprio `Dockerfile` dentro da sua pasta. O estágio `development` usa hot reload — o código fonte é montado via volume no compose, então alterações refletem sem rebuild.
+O projeto usa **dois estágios** no Dockerfile: `development` (com hot reload) e `production` (compilado, imagem menor). O `docker-compose.yml` seleciona o estágio via `target`.
 
 ```dockerfile
-# TODO: adicionar estágio production (npm run build → node dist/main)
+# Estágio de desenvolvimento — hot reload ativo
 FROM node:22-alpine AS development
 
 WORKDIR /usr/src/app
@@ -288,7 +288,17 @@ RUN npm install
 
 COPY . .
 
-CMD ["npm", "run", "start:dev"]
+# npm install roda novamente ao iniciar para pegar dependências novas
+# sem precisar recriar a imagem
+CMD ["sh", "-c", "npm install && npm run start:dev"]
+
+# [TODO] - Adicionar estágio de produção:
+# FROM node:22-alpine AS production
+# WORKDIR /usr/src/app
+# COPY package*.json ./
+# RUN npm install --omit=dev
+# COPY --from=development /usr/src/app/dist ./dist
+# CMD ["node", "dist/main"]
 ```
 
 ### docker-compose.yml — padrão por serviço
@@ -298,13 +308,55 @@ Cada serviço segue o mesmo padrão: uma entrada para a aplicação (`<nome>-app
 ```yaml
 services:
 
-  # --- nome-do-servico ---
-  nome-app:
+  api-gateway:
     build:
-      context: ./nome-do-servico     # pasta do serviço
+      context: ./api-gateway
+      target: development        # usa o estágio de dev do Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - CHOKIDAR_USEPOLLING=true # necessário no Windows — o Docker não repassa eventos
+                                 # de arquivo do host, então o watcher usa polling
+      - JWT_SECRET=${JWT_SECRET}
+      - SERVICO_A_URL=http://servico-a:3002
+      - SERVICO_B_URL=http://servico-b:3003
+    volumes:
+      - ./api-gateway:/usr/src/app        # monta o código do host → hot reload funciona
+      - /usr/src/app/node_modules         # volume anônimo: protege o node_modules do container
+    depends_on:
+      - auth-service
+      - servico-a
+      - servico-b
+
+  auth-service:
+    build:
+      context: ./auth-service
       target: development
-    env_file:
-      - ./nome-do-servico/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - MONGO_URI=${MONGO_URI}
+      - JWT_SECRET=${JWT_SECRET}
+    volumes:
+      - ./auth-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - database
+
+  servico-a:
+    build:
+      context: ./servico-a
+      target: development
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - MONGO_URI=${MONGO_URI}
+    volumes:
+      - ./servico-a:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - database
+
+  database:
+    image: mongo:7
     ports:
       - "300X:3000"                  # porta externa:interna (3000 é o padrão NestJS)
     volumes:
@@ -324,11 +376,31 @@ volumes:
   nome-data:
 ```
 
-Para adicionar um novo serviço, copie o bloco acima, troque `nome` e ajuste a porta externa.
+> **Por que dois volumes por serviço?**
+> - `./servico:/usr/src/app` — sincroniza o código do host com o container em tempo real (hot reload)
+> - `/usr/src/app/node_modules` — volume anônimo que "blinda" a pasta `node_modules` dentro do container, impedindo que o `node_modules` local do Windows sobrescreva o que foi instalado no Linux alpine
+>
+> **Por que `CHOKIDAR_USEPOLLING=true`?**
+> No Windows, o Docker Desktop não propaga eventos `inotify` do filesystem do host para o container Linux. Ferramentas que usam `chokidar` (como alguns middlewares de watch) respeitam essa variável e passam a usar polling. Porém, essa variável **não afeta o `nest start --watch`**, pois ele usa o compilador TypeScript diretamente, que tem seu próprio sistema de watch.
+>
+> **Por que adicionar `watchOptions` no `tsconfig.json`?**
+> O `nest start --watch` usa o TypeScript Compiler em modo watch, que por padrão depende de `inotify` — eventos que nunca chegam dentro do container quando os arquivos estão num volume montado do Windows. Para corrigir, é necessário configurar o TypeScript para usar polling:
+>
+> ```json
+> // tsconfig.json — adicionar fora de "compilerOptions"
+> "watchOptions": {
+>   "watchFile": "fixedPollingInterval",
+>   "watchDirectory": "fixedPollingInterval",
+>   "fallbackPolling": "fixedinterval"
+> }
+> ```
+>
+> Com isso, o compilador verifica os arquivos em intervalos fixos em vez de esperar por eventos do sistema operacional. Esse bloco deve estar presente no `tsconfig.json` de **cada serviço** que rode dentro do Docker em modo watch.
+>
+> **Por que `npm install` no CMD?**
+> Com o volume montado, o `package.json` do host fica visível no container. Toda vez que o container sobe, ele instala as dependências novas automaticamente — sem precisar recriar a imagem ao adicionar um pacote.
 
-### .env.example de cada serviço
-
-Cada serviço tem seu próprio `.env.example` dentro da sua pasta:
+### Arquivo .env na raiz
 
 ```
 # Credenciais MongoDB
@@ -348,26 +420,32 @@ Nunca commite o `.env` — ele já está no `.gitignore`. Cada membro cria o seu
 
 ```bash
 # Subir todos os containers em background
-docker-compose up -d
+docker compose up -d
 
 # Subir e rebuildar imagens após mudança de código
 docker-compose up -d --build
 
 # Ver os logs de um serviço específico
-docker-compose logs -f users-app
+docker compose logs -f nome-do-servico
 
 # Parar tudo
-docker-compose down
+docker compose down
 
 # Parar e apagar os volumes (reseta o banco)
-docker-compose down -v
+docker compose down -v
 
-# Rebuild de um serviço específico
-docker-compose up -d --build users-app
+# Rebuild de uma imagem (necessário ao mudar o Dockerfile)
+docker compose up -d --build nome-do-servico
 
 # Ver status dos containers
-docker-compose ps
+docker compose ps
 ```
+
+> **Quando precisar de `--build`?**
+> Com o setup de volumes + `npm install` no CMD, a maioria das situações **não** exige rebuild:
+> - **Mudança de código** → hot reload cuida automaticamente
+> - **Nova dependência** (`npm install pacote`) → basta reiniciar o container: `docker compose restart nome-do-servico`
+> - **Mudança no Dockerfile** → aí sim precisa do `--build`
 
 ---
 
