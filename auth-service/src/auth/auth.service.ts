@@ -4,10 +4,14 @@ import bcrypt from 'bcrypt';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import { UserDto } from './dto/user.dto';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly httpService: HttpService) {}
+  constructor(
+    private readonly httpService: HttpService,
+    private jwtService: JwtService,
+  ) {}
 
   async validate(loginDto: LoginDto) {
     let user: UserDto;
@@ -29,6 +33,11 @@ export class AuthService {
       user.password,
     );
     if (!passwordMatch) throw new UnauthorizedException();
-    return user;
+    else {
+      const payload = { sub: user.email, username: user.name };
+      return {
+        access_token: await this.jwtService.signAsync(payload),
+      };
+    }
   }
 }
