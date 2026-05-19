@@ -1,0 +1,44 @@
+services:
+  # Api Gateway (0)
+
+  # Serviço de usuários (1)
+  users-app:
+    build:
+      context: ./user-service
+      target: development
+    env_file:
+      - ./user-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./user-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - users-db
+
+  users-db:
+    image: mongo
+    env_file:
+      - ./user-service/.env
+    volumes:
+      - users-data:/data/db
+
+  # Serviço de Autenticação (2)
+  auth-app:
+    build:
+      context: ./auth-service
+      target: development
+    env_file:
+      - ./auth-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3002:3000"
+    volumes:
+      - ./auth-service:/usr/src/app
+      - /usr/src/app/node_modules
+
+volumes:
+  users-data:
