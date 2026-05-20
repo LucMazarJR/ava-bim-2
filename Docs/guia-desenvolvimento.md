@@ -1,45 +1,67 @@
-# Guia de Desenvolvimento em Grupo
+# Guia de Desenvolvimento
 
 > Como o time vai trabalhar junto | Git + NestJS + Docker + Organização
 
 ---
 
-## Estrutura do projeto — polyrepo em um único repositório
+## Estrutura do projeto
 
-Cada serviço é uma **aplicação NestJS completamente independente**: tem seu próprio `package.json`, seu próprio `node_modules`, seu próprio `tsconfig.json`. Elas vivem em pastas separadas dentro do mesmo repositório GitHub.
+Cada serviço é uma **aplicação NestJS completamente independente**: tem seu próprio `package.json`, `node_modules`, `tsconfig.json` e `.env`. Vivem em pastas separadas dentro do mesmo repositório.
 
 ```
 ava-bim-2/
 │
-├── .gitignore              ← ignora node_modules/ e .env em qualquer subpasta
+├── .gitignore
 ├── .env.example
 ├── docker-compose.yml      ← orquestra todos os containers
 ├── readme.md
 │
-├── api_gateway/            ← NestJS app independente
+├── api-gateway/            ← NestJS — porta de entrada, JWT Guard, roteamento
 │   ├── src/
 │   │   ├── main.ts
 │   │   ├── app.module.ts
-│   │   └── ...
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── nest-cli.json
-│   └── Dockerfile
-│
-├── auth_service/           ← NestJS app independente
-│   ├── src/
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── nest-cli.json
-│   └── Dockerfile
-│
-├── user-service/           ← NestJS app independente (configurado)
-│   ├── src/
+│   │   ├── auth/           ← proxy para auth-service
+│   │   ├── user/           ← proxy para user-service
+│   │   ├── guards/         ← AuthGuard (JWT global)
+│   │   └── decorators/     ← @Public() para rotas abertas
 │   ├── package.json
 │   ├── tsconfig.json
 │   ├── nest-cli.json
 │   ├── .env.example
 │   └── Dockerfile
+│
+├── auth-service/           ← NestJS — login e emissão de JWT
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── app.module.ts
+│   │   └── auth/
+│   │       ├── dto/        ← LoginDto, UserDto
+│   │       ├── auth.controller.ts
+│   │       ├── auth.service.ts
+│   │       └── auth.module.ts
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── nest-cli.json
+│   ├── .env.example
+│   └── Dockerfile
+│
+├── user-service/           ← NestJS — CRUD de usuários
+│   ├── src/
+│   │   ├── main.ts
+│   │   ├── app.module.ts
+│   │   └── user/
+│   │       ├── dto/        ← CreateUserDto, UpdateUserDto
+│   │       ├── schema/     ← UserSchema (Mongoose)
+│   │       ├── user.controller.ts
+│   │       ├── user.service.ts
+│   │       └── user.module.ts
+│   ├── package.json
+│   ├── tsconfig.json
+│   ├── nest-cli.json
+│   ├── .env.example
+│   └── Dockerfile
+│
+├── menu-service/           ← próximo serviço a ser criado
 │
 ├── monitoring/
 │   └── prometheus.yml
@@ -47,107 +69,60 @@ ava-bim-2/
 └── Docs/
 ```
 
-O `docker-compose.yml` e os arquivos da raiz são compartilhados pelo time inteiro. Cada pasta de serviço pertence a uma pessoa.
-
 ---
 
 ## Checklist geral do projeto
 
-### Planejamento
-- [ ] Escolher o tema e definir os domínios de cada serviço
-- [ ] Mapear os endpoints de cada serviço
-- [ ] Definir as portas de cada serviço (para não conflitar)
-- [ ] Dividir responsabilidades entre o time
+### ✅ Concluído
 
-### Infraestrutura e base
-- [ ] Criar repositório no GitHub com todos como colaboradores
-- [ ] Definir estrutura de pastas e criar branches por serviço
-- [ ] Criar `.env.example` com todas as variáveis necessárias
-- [ ] `docker-compose.yml` com banco de dados rodando
-- [ ] `Dockerfile` funcionando para cada serviço
-- [ ] `docker-compose up` sobe tudo sem erro
+- [x] Repositório no GitHub com colaboradores
+- [x] Estrutura de pastas e branches por serviço
+- [x] `docker-compose.yml` com todos os serviços e bancos
+- [x] `Dockerfile` funcionando (modo development com hot reload)
+- [x] `docker-compose up` sobe tudo sem erro
+- [x] User Service — CRUD completo com MongoDB e bcrypt
+- [x] Auth Service — Login com JWT, comunicação HTTP com user-service
+- [x] API Gateway — Guard JWT global, `@Public()`, roteamento via HttpService
+- [x] Swagger em todos os serviços (`/api`)
+- [x] DTOs com validação via `class-validator`
+- [x] Conventional commits com escopos
 
-### Auth Service
-- [ ] Registro de usuário
-- [ ] Login com geração de JWT
-- [ ] Endpoint `/metrics` exposto
+### 🔲 Próximos passos
 
-### API Gateway
-- [ ] Guard de JWT (retorna 401 se token inválido ou ausente)
-- [ ] Roteamento para todos os serviços via `HttpService`
-- [ ] Headers internos repassados (`x-user-id`, `x-user-role`)
-- [ ] Documentação Swagger em `/api-docs` cobrindo todos os endpoints
-- [ ] Endpoint `/metrics` exposto
-
-### Serviços de negócio
-- [ ] Cada serviço com seu CRUD implementado
-- [ ] `RolesGuard` protegendo rotas que exigem permissão (403 para não autorizados)
-- [ ] Regras de negócio do domínio funcionando
-- [ ] Comunicação HTTP entre serviços onde necessário
-- [ ] Endpoint `/metrics` exposto em cada um
-
-### Observabilidade
-- [ ] Prometheus coletando métricas de todos os serviços
-- [ ] Dashboard no Grafana com requisições/s, latência e erros
-- [ ] Script de teste de carga (k6) cobrindo o fluxo principal
-
-### Deploy
-- [ ] `docker-compose up` sobe tudo a partir de um clone limpo do repositório
-- [ ] `.env.example` preenchido o suficiente para qualquer pessoa rodar o projeto
-- [ ] (opcional) serviços publicados em nuvem (Render, Railway, etc.)
-
-### Apresentação
-- [ ] Fluxo completo funcionando via Gateway
-- [ ] Swagger acessível mostrando todos os endpoints documentados
-- [ ] k6 rodando ao vivo com métricas aparecendo no Grafana
+- [ ] Menu Service — CRUD de cardápios/restaurantes seguindo os padrões estabelecidos
+- [ ] `RolesGuard` no menu-service (dono vs cliente)
+- [ ] Propagação de `x-user-id` e `x-user-role` no Gateway → serviços internos
+- [ ] Endpoint `/metrics` (prom-client) em cada serviço
+- [ ] `prometheus.yml` com todos os targets
+- [ ] Dashboard no Grafana
+- [ ] Script de teste de carga com k6
+- [ ] Atualizar `docker-compose.yml` com menu-service e monitoring
 
 ---
 
-## Organização do repositório Git
+## Organização do Git
 
-### Serviços e branches
+### Branches e serviços
 
 | Serviço | Pasta | Branch | Porta externa |
 |---|---|---|---|
-| API Gateway | `api_gateway/` | `gateway` | 3000 |
-| Autenticação | `auth_service/` | `auth` | — |
-| Usuários | `user-service/` | `user` | 3001 |
+| API Gateway | `api-gateway/` | `gateway` → `develop` | 3000 |
+| Auth Service | `auth-service/` | `auth` → `develop` | 3002 |
+| User Service | `user-service/` | `user` → `develop` | 3001 |
+| Menu Service | `menu-service/` | `menu` → `develop` | 3003 |
 
 ```
 main
-├── user        ← user-service (usuários e perfis)
-├── auth        ← auth_service (autenticação e JWT)
-├── gateway     ← api_gateway (entrada, roteamento, Swagger)
-└── menu        ← [serviço de negócio adicional]
+└── develop
+    ├── gateway
+    ├── auth
+    ├── user
+    └── menu
 ```
 
-Regra simples: **cada pessoa trabalha na sua branch**. O `docker-compose.yml` e arquivos da raiz ficam na `main` e são atualizados via Pull Request conforme cada serviço é integrado.
+Regra simples: **cada pessoa trabalha na sua branch e abre PR para `develop`**. O merge na `main` é feito quando tudo estiver integrado e funcionando.
 
-```bash
-# Clonar o repositório
-git clone https://github.com/usuario/ava-bim-2.git
-cd ava-bim-2
-
-# Criar sua branch (nome do serviço, sem prefixo)
-git checkout -b user
-
-# Publicar a branch no GitHub pela primeira vez
-git push -u origin user
-
-# Nas próximas vezes, só:
-git push
-
-# Ver todas as branches (locais e remotas)
-git branch -a
-
-# Trocar de branch
-git checkout main
-git checkout user
-```
-
-### Convenção de mensagens de commit
-
-Os commits usam **conventional commits escopados** — o escopo identifica o serviço:
+### Convenção de commits
 
 ```
 tipo(escopo): descrição curta
@@ -155,21 +130,36 @@ tipo(escopo): descrição curta
 
 | Prefixo | Quando usar |
 |---------|-------------|
-| `feat(user):` | nova funcionalidade no user-service |
-| `feat(auth):` | nova funcionalidade no auth_service |
-| `feat(gateway):` | nova funcionalidade no api_gateway |
-| `fix(user):` | correção de bug |
-| `chore(user):` | configuração, dependências |
-| `docs:` | documentação (sem escopo de serviço) |
+| `feat(menu):` | nova funcionalidade no menu-service |
+| `fix(gateway):` | correção de bug no api-gateway |
+| `chore(menu):` | configuração, dependências |
+| `docs:` | atualização de documentação |
 | `refactor(auth):` | refatoração sem mudar comportamento |
 
-Exemplos reais do projeto:
+Exemplos do projeto:
 
 ```bash
-git commit -m "feat(user): add docker file and init docker compose"
-git commit -m "chore(user): initial service configuration"
-git commit -m "chore(gateway): init api_gateway service"
-git commit -m "docs: update documentation for nest.js"
+git commit -m "chore(gateway): add swagger documentation"
+git commit -m "feat(user): add findByEmail endpoint"
+git commit -m "docs: update development guide"
+```
+
+### Fluxo de trabalho diário
+
+```bash
+# Sincronizar antes de começar
+git checkout develop
+git pull origin develop
+
+git checkout menu   # sua branch
+git merge develop
+
+# Commitar com frequência
+git add menu-service/src/menu/menu.service.ts
+git commit -m "feat(menu): add create menu item endpoint"
+git push origin menu
+
+# Quando o serviço estiver pronto → PR para develop
 ```
 
 ---
@@ -184,327 +174,578 @@ git commit -m "docs: update documentation for nest.js"
 ### Do zero
 
 ```bash
-git clone <url-do-repo>
+git clone https://github.com/LucMazarJR/ava-bim-2.git
 cd ava-bim-2
 
 # Copiar e preencher o .env de cada serviço
+cp api-gateway/.env.example  api-gateway/.env
 cp user-service/.env.example user-service/.env
-# ... repetir para cada serviço configurado
+cp auth-service/.env.example auth-service/.env
 
 # Subir tudo
 docker-compose up -d
+
+# Verificar se subiu
+docker-compose ps
 ```
 
-### Verificar endpoints
+### Serviços disponíveis
 
 ```
-http://localhost:3000   → api_gateway
-http://localhost:3001   → user-service
+http://localhost:3000      → api-gateway
+http://localhost:3000/api  → Swagger do Gateway (centralizado)
+http://localhost:3001/api  → Swagger do user-service
+http://localhost:3002/api  → Swagger do auth-service
 ```
 
 ---
 
-## Primeiros passos — criando seu serviço
+## Padrões estabelecidos no projeto
 
-### 1. Criar o projeto NestJS
+Estes são os padrões que os três serviços já seguem. Ao criar o menu-service, siga os mesmos.
 
-Na raiz do repositório, na sua branch:
+### 1. Estrutura de módulo
 
-```bash
-# Instalar o CLI do NestJS (uma vez só, global)
-npm install -g @nestjs/cli
-
-# Criar o projeto NestJS na pasta do seu serviço
-nest new nome-do-servico --skip-git
-
-# O CLI vai criar a pasta com tudo configurado:
-# src/app.module.ts, src/main.ts, package.json, tsconfig.json, etc.
+```
+menu-service/src/menu/
+├── dto/
+│   ├── create-menu-item.dto.ts
+│   └── update-menu-item.dto.ts
+├── schema/
+│   └── menu-item.schema.ts
+├── menu.controller.ts
+├── menu.service.ts
+└── menu.module.ts
 ```
 
-A flag `--skip-git` é importante — evita que o NestJS crie um repositório Git separado dentro da pasta do serviço.
+### 2. Schema Mongoose
 
-### 2. Rodar localmente
+```typescript
+// schema/menu-item.schema.ts
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { HydratedDocument } from 'mongoose';
+
+export type MenuItemDocument = HydratedDocument<MenuItem>;
+
+@Schema()
+export class MenuItem {
+  @Prop({ required: true })
+  name!: string;
+
+  @Prop({ required: true })
+  price!: number;
+
+  @Prop({ required: false })
+  description?: string;
+
+  @Prop({ required: true })
+  restaurantId!: string;  // ID do dono/restaurante
+}
+
+export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);
+```
+
+### 3. DTOs com validação e Swagger
+
+```typescript
+// dto/create-menu-item.dto.ts
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsNumber, IsPositive, IsString } from 'class-validator';
+
+export class CreateMenuItemDto {
+  @ApiProperty({ description: 'Nome do item', example: 'X-Burguer' })
+  @IsNotEmpty()
+  @IsString()
+  name!: string;
+
+  @ApiProperty({ description: 'Preço em reais', example: 25.90 })
+  @IsNotEmpty()
+  @IsNumber()
+  @IsPositive()
+  price!: number;
+
+  @ApiPropertyOptional({ description: 'Descrição do item', example: 'Hambúrguer artesanal com queijo' })
+  @IsString()
+  description?: string;
+}
+```
+
+> **Padrão:** use `@ApiProperty` + `@IsNotEmpty()` para campos obrigatórios e `@ApiPropertyOptional` + sem `@IsNotEmpty()` para opcionais.
+
+### 4. Service com tratamento de erros
+
+```typescript
+// menu.service.ts
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Error, Model } from 'mongoose';
+import { MenuItem } from './schema/menu-item.schema';
+import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+
+@Injectable()
+export class MenuService {
+  constructor(
+    @InjectModel(MenuItem.name) private menuModel: Model<MenuItem>,
+  ) {}
+
+  async create(dto: CreateMenuItemDto): Promise<MenuItem> {
+    const item = new this.menuModel(dto);
+    return await item.save();
+  }
+
+  async findAll() {
+    return await this.menuModel.find();
+  }
+
+  async findById(id: string) {
+    try {
+      const item = await this.menuModel.findById(id);
+      if (!item) throw new NotFoundException('Item não encontrado');
+      return item;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('ID inválido');
+      }
+      throw error;
+    }
+  }
+
+  async update(id: string, dto: UpdateMenuItemDto) {
+    try {
+      const updated = await this.menuModel.findByIdAndUpdate(id, dto, { new: true });
+      if (!updated) throw new NotFoundException('Item não encontrado');
+      return updated;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('ID inválido');
+      }
+      throw error;
+    }
+  }
+
+  async remove(id: string) {
+    try {
+      const deleted = await this.menuModel.findByIdAndDelete(id);
+      if (!deleted) throw new NotFoundException('Item não encontrado');
+      return deleted;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('ID inválido');
+      }
+      throw error;
+    }
+  }
+}
+```
+
+> **Padrão:** o service trata os erros. O controller apenas delega. Use `Error.CastError` para IDs MongoDB inválidos, `NotFoundException` para não encontrado.
+
+### 5. Controller com Swagger
+
+```typescript
+// menu.controller.ts
+import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
+import { MenuService } from './menu.service';
+import { CreateMenuItemDto } from './dto/create-menu-item.dto';
+
+@ApiTags('Menu')
+@Controller('menu')
+export class MenuController {
+  constructor(private readonly menuService: MenuService) {}
+
+  @Post()
+  @ApiOperation({ summary: 'Criar item', description: 'Cria um novo item no cardápio.' })
+  @ApiBody({ type: CreateMenuItemDto })
+  @ApiResponse({ status: 201, description: 'Item criado com sucesso.' })
+  @ApiResponse({ status: 400, description: 'Dados inválidos.' })
+  create(@Body() dto: CreateMenuItemDto) {
+    return this.menuService.create(dto);
+  }
+
+  @Get()
+  @ApiOperation({ summary: 'Listar itens', description: 'Retorna todos os itens do cardápio.' })
+  @ApiResponse({ status: 200, description: 'Lista retornada com sucesso.' })
+  findAll() {
+    return this.menuService.findAll();
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Buscar item por ID' })
+  @ApiParam({ name: 'id', example: '664f1b2e8f1a2b3c4d5e6f7a' })
+  @ApiResponse({ status: 200, description: 'Item encontrado.' })
+  @ApiResponse({ status: 404, description: 'Item não encontrado.' })
+  findOne(@Param('id') id: string) {
+    return this.menuService.findById(id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({ summary: 'Atualizar item' })
+  @ApiParam({ name: 'id', example: '664f1b2e8f1a2b3c4d5e6f7a' })
+  @ApiResponse({ status: 200, description: 'Item atualizado.' })
+  @ApiResponse({ status: 404, description: 'Item não encontrado.' })
+  update(@Param('id') id: string, @Body() dto: UpdateMenuItemDto) {
+    return this.menuService.update(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: 'Remover item' })
+  @ApiParam({ name: 'id', example: '664f1b2e8f1a2b3c4d5e6f7a' })
+  @ApiResponse({ status: 200, description: 'Item removido.' })
+  @ApiResponse({ status: 404, description: 'Item não encontrado.' })
+  remove(@Param('id') id: string) {
+    return this.menuService.remove(id);
+  }
+}
+```
+
+### 6. Module
+
+```typescript
+// menu.module.ts
+import { Module } from '@nestjs/common';
+import { MongooseModule } from '@nestjs/mongoose';
+import { MenuController } from './menu.controller';
+import { MenuService } from './menu.service';
+import { MenuItem, MenuItemSchema } from './schema/menu-item.schema';
+
+@Module({
+  imports: [
+    MongooseModule.forFeature([{ name: MenuItem.name, schema: MenuItemSchema }]),
+  ],
+  controllers: [MenuController],
+  providers: [MenuService],
+})
+export class MenuModule {}
+```
+
+### 7. main.ts — padrão dos serviços de negócio
+
+```typescript
+// main.ts
+import { NestFactory } from '@nestjs/core';
+import { AppModule } from './app.module';
+import { ValidationPipe } from '@nestjs/common';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  const config = new DocumentBuilder()
+    .setTitle('Menu Service')
+    .setDescription('Serviço interno de gerenciamento de cardápios.')
+    .setVersion('1.0')
+    .addTag('Menu', 'Gerenciamento de itens do cardápio')
+    .build();
+
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, documentFactory, {
+    swaggerOptions: { persistAuthorization: true },
+  });
+
+  app.useGlobalPipes(new ValidationPipe());
+
+  await app.listen(process.env.PORT ?? 3000);
+}
+void bootstrap();
+```
+
+---
+
+## Controle de permissões com RolesGuard
+
+O Gateway já repassa o payload JWT no objeto `request['user']` após validação. O próximo passo é repassar essas informações nos **headers internos** para os serviços de negócio saberem quem está fazendo a requisição.
+
+### Passo 1 — Repassar headers no Gateway
+
+No Gateway, após o Guard validar o token, o controller que faz proxy deve incluir os headers internos:
+
+```typescript
+// No controller do Gateway (ex: menu.controller.ts no api-gateway)
+import { Headers, Req } from '@nestjs/common';
+import { Request } from 'express';
+
+@Get()
+findAll(@Req() req: Request) {
+  const userId = req['user']?.sub;
+  const userRole = req['user']?.role;
+
+  return this.httpService
+    .get<unknown>(`${process.env.MENU_SERVICE_URL}/menu`, {
+      headers: {
+        'x-user-id': userId,
+        'x-user-role': userRole,
+      },
+    })
+    .pipe(map((response) => response.data));
+}
+```
+
+> Para isso funcionar, o JWT precisa carregar `role` no payload. No auth-service, atualize o payload gerado:
+> ```typescript
+> const payload = { sub: user._id, username: user.name, role: user.role };
+> ```
+> E adicione `role` no schema do user-service.
+
+### Passo 2 — RolesGuard no serviço de negócio
+
+```typescript
+// menu-service/src/guards/roles.guard.ts
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+
+export const Roles = (...roles: string[]) => SetMetadata('roles', roles);
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const requiredRoles = this.reflector.get<string[]>('roles', context.getHandler());
+    if (!requiredRoles) return true; // rota sem @Roles() é livre
+
+    const request = context.switchToHttp().getRequest();
+    const userRole = request.headers['x-user-role'];
+
+    if (!requiredRoles.includes(userRole)) {
+      throw new ForbiddenException('Permissão insuficiente');
+    }
+    return true;
+  }
+}
+```
+
+Uso no controller do menu-service:
+
+```typescript
+@Delete(':id')
+@Roles('owner')          // só dono pode deletar
+@UseGuards(RolesGuard)
+@ApiOperation({ summary: 'Remover item (apenas dono)' })
+remove(@Param('id') id: string) {
+  return this.menuService.remove(id);
+}
+```
+
+> **Lógica dos status:**
+> - **401 Unauthorized** → token ausente ou inválido (Gateway rejeita)
+> - **403 Forbidden** → token válido, mas role errada (RolesGuard rejeita)
+
+---
+
+## Endpoint `/metrics` para Prometheus
+
+Cada serviço precisa expor métricas para o Prometheus coletar. Instale o `prom-client`:
 
 ```bash
 cd nome-do-servico
-npm run start:dev   # modo watch, reinicia ao salvar
+npm install prom-client
+```
+
+Adicione no `main.ts` de cada serviço:
+
+```typescript
+import { collectDefaultMetrics, Registry } from 'prom-client';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  
+  // ... configuração Swagger e ValidationPipe ...
+
+  // Métricas para o Prometheus
+  const register = new Registry();
+  collectDefaultMetrics({ register });
+
+  app.getHttpAdapter().get('/metrics', async (req, res) => {
+    res.set('Content-Type', register.contentType);
+    res.end(await register.metrics());
+  });
+
+  await app.listen(process.env.PORT ?? 3000);
+}
+```
+
+Depois de adicionar em todos os serviços, atualize o `monitoring/prometheus.yml`:
+
+```yaml
+scrape_configs:
+  - job_name: 'api-gateway'
+    static_configs:
+      - targets: ['gateway-app:3000']
+
+  - job_name: 'user-service'
+    static_configs:
+      - targets: ['users-app:3000']
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-app:3000']
+
+  - job_name: 'menu-service'
+    static_configs:
+      - targets: ['menu-app:3000']
 ```
 
 ---
 
-## Fluxo de trabalho diário
+## Criando o Menu Service do zero
 
-### Começando — sincronizar com o que o time fez
-
-```bash
-git checkout main
-git pull origin main
-
-git checkout user   # sua branch
-git merge main
-```
-
-Faça isso antes de começar a trabalhar. Evita conflitos grandes no final.
-
-### Salvando o progresso — commit frequente
+### 1. Inicializar o projeto NestJS
 
 ```bash
-git status
-
-# Adicionar arquivos específicos (nunca git add -A cegamente)
-git add user-service/src/users/users.service.ts
-git add user-service/src/users/users.controller.ts
-
-git commit -m "feat(user): implementar CRUD de usuários"
-
-git push origin user
+# Na raiz do repositório, na branch menu
+npm install -g @nestjs/cli
+nest new menu-service --skip-git
 ```
 
-### Abrindo Pull Request — quando o serviço estiver pronto
+### 2. Instalar dependências
 
-1. Acesse o repositório no GitHub
-2. Clique em **"Compare & pull request"** na sua branch
-3. Título direto: `feat(user): user-service completo`
-4. Descrição: o que foi implementado e como testar
-5. Peça para alguém do time revisar antes de fazer merge na `main`
+```bash
+cd menu-service
+npm install @nestjs/mongoose mongoose
+npm install @nestjs/swagger swagger-ui-express
+npm install class-validator class-transformer
+npm install prom-client
+```
+
+### 3. Adicionar ao docker-compose.yml
+
+```yaml
+  # Menu Service (3)
+  menu-app:
+    build:
+      context: ./menu-service
+      target: development
+    env_file:
+      - ./menu-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./menu-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - menu-db
+
+  menu-db:
+    image: mongo
+    env_file:
+      - ./menu-service/.env
+    volumes:
+      - menu-data:/data/db
+
+volumes:
+  users-data:
+  menu-data:  # ← adicionar aqui também
+```
+
+### 4. Adicionar ao API Gateway
+
+Crie `api-gateway/src/menu/menu.module.ts` e `menu.controller.ts` seguindo o mesmo padrão do `user.module.ts` e `user.controller.ts`. Configure a variável `MENU_SERVICE_URL` no `.env` do gateway.
+
+### 5. Estrutura de arquivos a criar
+
+```
+menu-service/src/
+├── main.ts                         ← copiar padrão do user-service, trocar título
+├── app.module.ts                   ← importar MenuModule + MongooseModule.forRoot
+└── menu/
+    ├── dto/
+    │   ├── create-menu-item.dto.ts ← campos: name, price, description
+    │   └── update-menu-item.dto.ts ← PartialType(CreateMenuItemDto)
+    ├── schema/
+    │   └── menu-item.schema.ts     ← campos: name, price, description, restaurantId
+    ├── menu.controller.ts          ← CRUD completo com Swagger
+    ├── menu.service.ts             ← lógica + tratamento de erros
+    └── menu.module.ts              ← registrar schema e módulo
+```
 
 ---
 
-## Criando os containers Docker
+## Docker
 
-### Dockerfile
-
-O projeto usa **dois estágios** no Dockerfile: `development` (com hot reload) e `production` (compilado, imagem menor). O `docker-compose.yml` seleciona o estágio via `target`.
+### Dockerfile (padrão de todos os serviços)
 
 ```dockerfile
-# Estágio de desenvolvimento — hot reload ativo
 FROM node:22-alpine AS development
 
 WORKDIR /usr/src/app
 
 COPY package*.json ./
-
 RUN npm install
-
 COPY . .
 
-# npm install roda novamente ao iniciar para pegar dependências novas
-# sem precisar recriar a imagem
 CMD ["sh", "-c", "npm install && npm run start:dev"]
-
-# [TODO] - Adicionar estágio de produção:
-# FROM node:22-alpine AS production
-# WORKDIR /usr/src/app
-# COPY package*.json ./
-# RUN npm install --omit=dev
-# COPY --from=development /usr/src/app/dist ./dist
-# CMD ["node", "dist/main"]
 ```
 
-### docker-compose.yml — padrão por serviço
-
-Cada serviço segue o mesmo padrão: uma entrada para a aplicação (`<nome>-app`) e uma para o banco (`<nome>-db`). O volume duplo no serviço app garante o hot reload sem perder o `node_modules` do container.
-
-```yaml
-services:
-
-  api-gateway:
-    build:
-      context: ./api-gateway
-      target: development        # usa o estágio de dev do Dockerfile
-    ports:
-      - "3000:3000"
-    environment:
-      - CHOKIDAR_USEPOLLING=true # necessário no Windows — o Docker não repassa eventos
-                                 # de arquivo do host, então o watcher usa polling
-      - JWT_SECRET=${JWT_SECRET}
-      - SERVICO_A_URL=http://servico-a:3002
-      - SERVICO_B_URL=http://servico-b:3003
-    volumes:
-      - ./api-gateway:/usr/src/app        # monta o código do host → hot reload funciona
-      - /usr/src/app/node_modules         # volume anônimo: protege o node_modules do container
-    depends_on:
-      - auth-service
-      - servico-a
-      - servico-b
-
-  auth-service:
-    build:
-      context: ./auth-service
-      target: development
-    environment:
-      - CHOKIDAR_USEPOLLING=true
-      - MONGO_URI=${MONGO_URI}
-      - JWT_SECRET=${JWT_SECRET}
-    volumes:
-      - ./auth-service:/usr/src/app
-      - /usr/src/app/node_modules
-    depends_on:
-      - database
-
-  servico-a:
-    build:
-      context: ./servico-a
-      target: development
-    environment:
-      - CHOKIDAR_USEPOLLING=true
-      - MONGO_URI=${MONGO_URI}
-    volumes:
-      - ./servico-a:/usr/src/app
-      - /usr/src/app/node_modules
-    depends_on:
-      - database
-
-  database:
-    image: mongo:7
-    ports:
-      - "300X:3000"                  # porta externa:interna (3000 é o padrão NestJS)
-    volumes:
-      - ./nome-do-servico:/usr/src/app   # monta o código → hot reload
-      - /usr/src/app/node_modules        # preserva o node_modules do container
-    depends_on:
-      - nome-db
-
-  nome-db:
-    image: mongo
-    env_file:
-      - ./nome-do-servico/.env
-    volumes:
-      - nome-data:/data/db
-
-volumes:
-  nome-data:
-```
-
-> **Por que dois volumes por serviço?**
-> - `./servico:/usr/src/app` — sincroniza o código do host com o container em tempo real (hot reload)
-> - `/usr/src/app/node_modules` — volume anônimo que "blinda" a pasta `node_modules` dentro do container, impedindo que o `node_modules` local do Windows sobrescreva o que foi instalado no Linux alpine
->
-> **Por que `CHOKIDAR_USEPOLLING=true`?**
-> No Windows, o Docker Desktop não propaga eventos `inotify` do filesystem do host para o container Linux. Ferramentas que usam `chokidar` (como alguns middlewares de watch) respeitam essa variável e passam a usar polling. Porém, essa variável **não afeta o `nest start --watch`**, pois ele usa o compilador TypeScript diretamente, que tem seu próprio sistema de watch.
->
-> **Por que adicionar `watchOptions` no `tsconfig.json`?**
-> O `nest start --watch` usa o TypeScript Compiler em modo watch, que por padrão depende de `inotify` — eventos que nunca chegam dentro do container quando os arquivos estão num volume montado do Windows. Para corrigir, é necessário configurar o TypeScript para usar polling:
->
-> ```json
-> // tsconfig.json — adicionar fora de "compilerOptions"
-> "watchOptions": {
->   "watchFile": "fixedPollingInterval",
->   "watchDirectory": "fixedPollingInterval",
->   "fallbackPolling": "fixedinterval"
-> }
-> ```
->
-> Com isso, o compilador verifica os arquivos em intervalos fixos em vez de esperar por eventos do sistema operacional. Esse bloco deve estar presente no `tsconfig.json` de **cada serviço** que rode dentro do Docker em modo watch.
->
-> **Por que `npm install` no CMD?**
-> Com o volume montado, o `package.json` do host fica visível no container. Toda vez que o container sobe, ele instala as dependências novas automaticamente — sem precisar recriar a imagem ao adicionar um pacote.
-
-### Arquivo .env na raiz
-
-```
-# Credenciais MongoDB
-MONGO_INITDB_ROOT_USERNAME=
-MONGO_INITDB_ROOT_PASSWORD=
-MONGODB_URI=mongodb://usuario:senha@nome-db:27017/nomedb?authSource=admin
-
-# Porta interna do NestJS
-PORT=3000
-```
-
-Nunca commite o `.env` — ele já está no `.gitignore`. Cada membro cria o seu localmente com base no `.env.example`.
-
----
-
-## Comandos Docker essenciais
+### Comandos essenciais
 
 ```bash
-# Subir todos os containers em background
-docker compose up -d
+# Subir tudo
+docker-compose up -d
 
-# Subir e rebuildar imagens após mudança de código
-docker-compose up -d --build
+# Ver logs de um serviço
+docker-compose logs -f menu-app
 
-# Ver os logs de um serviço específico
-docker compose logs -f nome-do-servico
+# Rebuildar após mudar Dockerfile
+docker-compose up -d --build menu-app
 
-# Parar tudo
-docker compose down
+# Reiniciar após instalar pacote (sem rebuild)
+docker-compose restart menu-app
 
-# Parar e apagar os volumes (reseta o banco)
-docker compose down -v
+# Derrubar tudo
+docker-compose down
 
-# Rebuild de uma imagem (necessário ao mudar o Dockerfile)
-docker compose up -d --build nome-do-servico
+# Derrubar e resetar bancos
+docker-compose down -v
 
-# Ver status dos containers
-docker compose ps
+# Ver status
+docker-compose ps
 ```
 
-> **Quando precisar de `--build`?**
-> Com o setup de volumes + `npm install` no CMD, a maioria das situações **não** exige rebuild:
-> - **Mudança de código** → hot reload cuida automaticamente
-> - **Nova dependência** (`npm install pacote`) → basta reiniciar o container: `docker compose restart nome-do-servico`
-> - **Mudança no Dockerfile** → aí sim precisa do `--build`
+> **Quando usar `--build`?**  
+> Só ao mudar o `Dockerfile`. Mudança de código → hot reload automático. Nova dependência (`npm install pacote`) → `docker-compose restart nome-do-servico`.
 
----
+### Hot reload no Windows
 
-## Testando seu serviço isolado
+Adicione no `tsconfig.json` de cada serviço para o watch funcionar dentro do Docker:
 
-Durante o desenvolvimento, você não precisa subir todos os containers. Suba só o banco e seu serviço:
-
-```bash
-# Sobe só o banco e o serviço em desenvolvimento
-docker-compose up -d users-db users-app
-
-# Ou rode localmente sem Docker (mais rápido no dia a dia):
-cd user-service
-npm run start:dev
-```
-
-O NestJS em modo `start:dev` usa hot reload — reinicia automaticamente ao salvar arquivos.
-
-Para conectar localmente sem Docker, configure `MONGODB_URI=mongodb://localhost:27017/users` no `.env` do serviço e suba só o MongoDB via Docker.
-
-Quando estiver funcionando isolado, avise o time para integrar no compose completo.
-
----
-
-## Comunicação interna entre serviços
-
-O módulo `HttpModule` do NestJS (`@nestjs/axios`) é a forma recomendada para chamar outros serviços internamente.
-
-```typescript
-// No module:
-import { HttpModule } from '@nestjs/axios';
-
-@Module({
-  imports: [HttpModule],
-})
-
-// No service:
-import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
-
-constructor(private readonly httpService: HttpService) {}
-
-async buscarRecurso(id: string) {
-  const { data } = await firstValueFrom(
-    this.httpService.get(`${process.env.USER_SERVICE_URL}/users/${id}`)
-  );
-  return data;
+```json
+{
+  "compilerOptions": { ... },
+  "watchOptions": {
+    "watchFile": "fixedPollingInterval",
+    "watchDirectory": "fixedPollingInterval",
+    "fallbackPolling": "fixedinterval"
+  }
 }
 ```
 
-Dentro do Docker, a URL é o **nome do serviço no docker-compose**: `http://users-app:3000`. No desenvolvimento local, é `http://localhost:3001`.
+---
+
+## Testando isolado
+
+Durante o desenvolvimento, suba só o banco e o seu serviço:
+
+```bash
+# Só o banco e o serviço em desenvolvimento
+docker-compose up -d menu-db menu-app
+
+# Ou rode local (mais rápido):
+cd menu-service
+npm run start:dev
+```
+
+Teste no Swagger do serviço (`localhost:3003/api`) ou via Postman diretamente na porta do serviço. Quando funcionar isolado, avise o time para integrar no compose completo e no Gateway.
 
 ---
 
 ## Dicas para evitar conflitos
 
-- **Não mexa em arquivos de outros serviços.** Se precisar, converse antes
+- **Não mexa em arquivos de outros serviços.** Converse antes se precisar
 - **O `docker-compose.yml` é compartilhado** — alinhem antes de fazer merge de mudanças nele
 - **Antes de abrir PR**, rode `docker-compose up --build` localmente e confirme que tudo sobe
-- **Variável de ambiente nova**: adicione ao `.env.example` do serviço antes de fazer merge
-- **Nunca commite `node_modules/`** — o `.gitignore` já cobre, mas confirme antes do primeiro push de cada serviço
-- **Nunca commite `.env`** — use `.env.example` como referência para o time
+- **Variável de ambiente nova**: adicione ao `.env.example` antes de fazer merge
+- **Nunca commite `node_modules/`** — o `.gitignore` já cobre
+- **Nunca commite `.env`** — use `.env.example` como referência
