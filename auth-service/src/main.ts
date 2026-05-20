@@ -8,10 +8,19 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('Auth Service')
-    .setDescription('Serviço de Autenticação')
+    .setDescription(
+      'Serviço interno de autenticação. Responsável por validar credenciais e emitir tokens JWT.',
+    )
+    .setVersion('1.0')
+    .addTag('Auth', 'Autenticação de usuários')
     .build();
+
   const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, documentFactory);
+  SwaggerModule.setup('api', app, documentFactory, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
 
   app.useGlobalPipes(new ValidationPipe());
 
