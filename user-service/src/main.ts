@@ -8,10 +8,19 @@ async function bootstrap() {
 
   const config = new DocumentBuilder()
     .setTitle('User Service')
-    .setDescription('Serviço de Usuários')
+    .setDescription(
+      'Serviço interno de gerenciamento de usuários. Responsável pelo CRUD de usuários no banco de dados.',
+    )
+    .setVersion('1.0')
+    .addTag('User', 'Gerenciamento de usuários')
     .build();
+
   const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, documentFactory);
+  SwaggerModule.setup('api', app, documentFactory, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
 
   app.useGlobalPipes(new ValidationPipe());
 
