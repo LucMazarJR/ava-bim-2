@@ -53,5 +53,30 @@ services:
       - ./auth-service:/usr/src/app
       - /usr/src/app/node_modules
 
+  # Serviço de Cardápio (3)
+  menu-app:
+    build:
+      context: ./menu-service
+      target: development
+    env_file:
+      - ./menu-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3003:3000"
+    volumes:
+      - ./menu-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - menu-db
+
+  menu-db:
+    image: mongo
+    env_file:
+      - ./menu-service/.env
+    volumes:
+      - menu-data:/data/db
+
 volumes:
   users-data:
+  menu-data:
