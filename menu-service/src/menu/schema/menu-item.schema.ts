@@ -1,9 +1,9 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { HydratedDocument, Schema as MongooseSchema } from 'mongoose';
+import { HydratedDocument } from 'mongoose';
 
 export type MenuItemDocument = HydratedDocument<MenuItem>;
 
-@Schema()
+@Schema({ timestamps: true })
 export class MenuItem {
   @Prop({ required: true })
   name!: string;
@@ -20,8 +20,8 @@ export class MenuItem {
   @Prop({ required: true })
   restaurantId!: string;
 
-  @Prop({ default: true })
+  @Prop({ required: true, default: true })
   available!: boolean;
 }
 
-export const MenuItemSchema: MongooseSchema = SchemaFactory.createForClass(MenuItem);
+export const MenuItemSchema = SchemaFactory.createForClass(MenuItem);

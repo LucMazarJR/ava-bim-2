@@ -9,20 +9,28 @@ import { MenuItem } from './schema/menu-item.schema';
 import { CreateMenuItemDto } from './dto/create-menu-item.dto';
 import { UpdateMenuItemDto } from './dto/update-menu-item.dto';
 
+interface MongoError {
+  code?: number;
+  keyValue?: Record<string, unknown>;
+}
+
 @Injectable()
 export class MenuService {
-  constructor(@InjectModel(MenuItem.name) private menuModel: Model<MenuItem>) {}
+  constructor(
+    @InjectModel(MenuItem.name) private menuModel: Model<MenuItem>,
+  ) {}
 
   async create(dto: CreateMenuItemDto): Promise<MenuItem> {
-    return await new this.menuModel(dto).save();
+    const created = new this.menuModel(dto);
+    return await created.save();
   }
 
   async findAll(): Promise<MenuItem[]> {
-    return await this.menuModel.find();
+    return this.menuModel.find();
   }
 
   async findByRestaurant(restaurantId: string): Promise<MenuItem[]> {
-    return await this.menuModel.find({ restaurantId });
+    return this.menuModel.find({ restaurantId });
   }
 
   async findById(id: string): Promise<MenuItem> {
@@ -30,22 +38,30 @@ export class MenuService {
       const item = await this.menuModel.findById(id);
       if (!item) throw new NotFoundException('Item não encontrado');
       return item;
-    } catch (error: unknown) {
-      if (error instanceof Error.CastError) throw new BadRequestException('ID inválido');
-      if (error instanceof Error) throw error;
-      throw new BadRequestException('Erro inesperado');
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
     }
   }
 
   async update(id: string, dto: UpdateMenuItemDto): Promise<MenuItem> {
     try {
-      const updated = await this.menuModel.findByIdAndUpdate(id, dto, { new: true });
+      const updated = await this.menuModel.findByIdAndUpdate(id, dto, {
+        new: true,
+      });
       if (!updated) throw new NotFoundException('Item não encontrado');
       return updated;
-    } catch (error: unknown) {
-      if (error instanceof Error.CastError) throw new BadRequestException('ID inválido');
-      if (error instanceof Error) throw error;
-      throw new BadRequestException('Erro inesperado');
+    } catch (error) {
+      const { code, keyValue } = error as MongoError;
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      if (code === 11000 && keyValue) {
+        throw new BadRequestException('Dados duplicados');
+      }
+      throw error;
     }
   }
 
@@ -54,10 +70,11 @@ export class MenuService {
       const deleted = await this.menuModel.findByIdAndDelete(id);
       if (!deleted) throw new NotFoundException('Item não encontrado');
       return deleted;
-    } catch (error: unknown) {
-      if (error instanceof Error.CastError) throw new BadRequestException('ID inválido');
-      if (error instanceof Error) throw error;
-      throw new BadRequestException('Erro inesperado');
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
     }
   }
 }
