@@ -82,21 +82,23 @@ ava-bim-2/
 - [x] `docker-compose up` sobe tudo sem erro
 - [x] User Service — CRUD completo com MongoDB e bcrypt
 - [x] Auth Service — Login com JWT, comunicação HTTP com user-service
-- [x] API Gateway — Guard JWT global, `@Public()`, roteamento via HttpService
-- [x] Swagger em todos os serviços (`/api`)
-- [x] DTOs com validação via `class-validator`
+- [x] Orders Service — CRUD completo com MongoDB, rota de entrega por prioridade
+- [x] Delivery Service — CRUD completo com MongoDB e status de entrega
+- [x] Restaurant Service — CRUD completo com MongoDB, busca por dono
+- [x] API Gateway — Guard JWT global, `@Public()`, roteamento para todos os serviços
+- [x] Swagger em todos os serviços (`/api`) e no Gateway centralizado
+- [x] DTOs com validação via `class-validator` em todos os serviços
+- [x] `ConfigModule` global em todos os serviços
 - [x] Conventional commits com escopos
 
 ### 🔲 Próximos passos
 
-- [ ] Menu Service — CRUD de cardápios/restaurantes seguindo os padrões estabelecidos
-- [ ] `RolesGuard` no menu-service (dono vs cliente)
-- [ ] Propagação de `x-user-id` e `x-user-role` no Gateway → serviços internos
+- [ ] `RolesGuard` — propagação de `x-user-id` e `x-user-role` no Gateway → serviços internos
 - [ ] Endpoint `/metrics` (prom-client) em cada serviço
 - [ ] `prometheus.yml` com todos os targets
 - [ ] Dashboard no Grafana
 - [ ] Script de teste de carga com k6
-- [ ] Atualizar `docker-compose.yml` com menu-service e monitoring
+- [ ] Atualizar `docker-compose.yml` com monitoring
 
 ---
 
@@ -104,12 +106,14 @@ ava-bim-2/
 
 ### Branches e serviços
 
-| Serviço | Pasta | Branch | Porta externa |
-|---|---|---|---|
-| API Gateway | `api-gateway/` | `gateway` → `develop` | 3000 |
-| Auth Service | `auth-service/` | `auth` → `develop` | 3002 |
-| User Service | `user-service/` | `user` → `develop` | 3001 |
-| Menu Service | `menu-service/` | `menu` → `develop` | 3003 |
+| Serviço | Pasta | Branch | Porta externa | Swagger |
+|---|---|---|---|---|
+| API Gateway | `api-gateway/` | `gateway` → `develop` | 3000 | `localhost:3000/api` |
+| User Service | `user-service/` | `user` → `develop` | 3001 | `localhost:3001/api` |
+| Auth Service | `auth-service/` | `auth` → `develop` | 3002 | `localhost:3002/api` |
+| Orders Service | `orders-service/` | `orders` → `develop` | 3003 | `localhost:3003/api` |
+| Delivery Service | `delivery-service/` | `delivery` → `develop` | 3004 | `localhost:3004/api` |
+| Restaurant Service | `restaurant-service/` | `restaurant` → `develop` | 3005 | `localhost:3005/api` |
 
 ```
 main
@@ -117,7 +121,9 @@ main
     ├── gateway
     ├── auth
     ├── user
-    └── menu
+    ├── orders
+    ├── delivery
+    └── restaurant
 ```
 
 Regra simples: **cada pessoa trabalha na sua branch e abre PR para `develop`**. O merge na `main` é feito quando tudo estiver integrado e funcionando.
@@ -193,9 +199,12 @@ docker-compose ps
 
 ```
 http://localhost:3000      → api-gateway
-http://localhost:3000/api  → Swagger do Gateway (centralizado)
+http://localhost:3000/api  → Swagger do Gateway (centralizado — use este para testar)
 http://localhost:3001/api  → Swagger do user-service
 http://localhost:3002/api  → Swagger do auth-service
+http://localhost:3003/api  → Swagger do orders-service
+http://localhost:3004/api  → Swagger do delivery-service
+http://localhost:3005/api  → Swagger do restaurant-service
 ```
 
 ---
