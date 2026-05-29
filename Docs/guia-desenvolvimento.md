@@ -625,7 +625,6 @@ npm install prom-client
     volumes:
       - ./menu-service:/usr/src/app
       - /usr/src/app/node_modules   # isola node_modules do container
-      - /usr/src/app/dist           # isola dist — evita cache stale do host
     depends_on:
       - menu-db
 
@@ -677,8 +676,10 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 
-CMD ["sh", "-c", "npm install && npm run start:dev"]
+CMD ["sh", "-c", "npm install && rm -f dist/.tsbuildinfo tsconfig.build.tsbuildinfo && npm run start:dev"]
 ```
+
+> O `rm -f` no CMD garante que qualquer cache `.tsbuildinfo` local montado via volume seja removido antes de iniciar, evitando que o TypeScript pule a compilação e cause o erro `Cannot find module '/usr/src/app/dist/main'`.
 
 ### Comandos essenciais
 
@@ -727,16 +728,15 @@ Para o watch funcionar dentro do Docker no Windows, o `tsconfig.json` de cada se
 }
 ```
 
-E o `docker-compose.yml` deve isolar o `dist/` do container do host com um volume anônimo, para evitar que um cache local corrompido impeça a compilação:
+O `docker-compose.yml` não precisa de volume para `dist/` — o Dockerfile já cuida disso limpando o cache antes de iniciar:
 
 ```yaml
 volumes:
   - ./meu-service:/usr/src/app
   - /usr/src/app/node_modules   # isola node_modules
-  - /usr/src/app/dist           # isola dist — evita cache stale do host
 ```
 
-> **Por que isolar o `dist/`?** O TypeScript usa `dist/.tsbuildinfo` como cache incremental. Se esse arquivo existir localmente (com estado de uma compilação anterior), ele é montado no container e o TypeScript pula a compilação — resultando em `Cannot find module '/usr/src/app/dist/main'`. Com o volume anônimo, o `dist/` do container é sempre isolado do host.
+> **Por que o `rm -f` no CMD?** O TypeScript usa `dist/.tsbuildinfo` como cache incremental. Se esse arquivo existir localmente e for montado via volume, o TypeScript pula a compilação — resultando em `Cannot find module '/usr/src/app/dist/main'`. O `rm -f` no Dockerfile garante que o container sempre compila do zero ao iniciar.
 
 ---
 

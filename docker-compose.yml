@@ -13,7 +13,6 @@ services:
     volumes:
       - ./api-gateway:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
 
   # Serviço de usuários (1)
   users-app:
@@ -29,7 +28,6 @@ services:
     volumes:
       - ./user-service:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
     depends_on:
       - users-db
 
@@ -54,7 +52,6 @@ services:
     volumes:
       - ./auth-service:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
 
   # Serviço de Pedidos (3)
   orders-app:
@@ -70,7 +67,6 @@ services:
     volumes:
       - ./orders-service:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
     depends_on:
       - orders-db
 
@@ -95,7 +91,6 @@ services:
     volumes:
       - ./delivery-service:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
     depends_on:
       - delivery-db
 
@@ -120,7 +115,6 @@ services:
     volumes:
       - ./restaurant-service:/usr/src/app
       - /usr/src/app/node_modules
-      - /usr/src/app/dist
     depends_on:
       - restaurant-db
 
