@@ -7,6 +7,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { AuthGuard } from './guards/src.guard';
 import { AuthModule } from './auth/auth.module';
 import { UserModule } from './user/user.module';
+import { DeliveryModule } from './delivery/delivery.module';
+import { OrdersModule } from './orders/orders.module';
+import { RestaurantModule } from './restaurant/restaurant.module';
 import { HttpModule } from '@nestjs/axios';
 
 @Module({
@@ -20,6 +23,9 @@ import { HttpModule } from '@nestjs/axios';
     }),
     AuthModule,
     UserModule,
+    DeliveryModule,
+    OrdersModule,
+    RestaurantModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: AuthGuard }],
