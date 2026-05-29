@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Error, Model } from 'mongoose';
 import { CreateDeliveryDto } from './dto/create-delivery.dto';
 import { UpdateDeliveryDto } from './dto/update-delivery.dto';
 import { Delivery, DeliveryDocument } from './schema/delivery.schema';
@@ -21,22 +21,43 @@ export class DeliveryService {
   }
 
   async findOne(id: string) {
-    const delivery = await this.deliveryModel.findById(id).exec();
-    if (!delivery) throw new NotFoundException(`Delivery ${id} not found`);
-    return delivery;
+    try {
+      const delivery = await this.deliveryModel.findById(id).exec();
+      if (!delivery) throw new NotFoundException(`Delivery ${id} not found`);
+      return delivery;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 
   async update(id: string, updateDeliveryDto: UpdateDeliveryDto) {
-    const delivery = await this.deliveryModel
-      .findByIdAndUpdate(id, updateDeliveryDto, { new: true })
-      .exec();
-    if (!delivery) throw new NotFoundException(`Delivery ${id} not found`);
-    return delivery;
+    try {
+      const delivery = await this.deliveryModel
+        .findByIdAndUpdate(id, updateDeliveryDto, { new: true })
+        .exec();
+      if (!delivery) throw new NotFoundException(`Delivery ${id} not found`);
+      return delivery;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string) {
-    const delivery = await this.deliveryModel.findByIdAndDelete(id).exec();
-    if (!delivery) throw new NotFoundException(`Delivery ${id} not found`);
-    return delivery;
+    try {
+      const delivery = await this.deliveryModel.findByIdAndDelete(id).exec();
+      if (!delivery) throw new NotFoundException(`Delivery ${id} not found`);
+      return delivery;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 }

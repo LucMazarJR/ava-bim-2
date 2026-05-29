@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Error, Model } from 'mongoose';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
 import { Order, OrderDocument, OrderStatus } from './schema/order.schema';
@@ -20,23 +20,44 @@ export class OrderService {
   }
 
   async findOne(id: string) {
-    const order = await this.orderModel.findById(id).exec();
-    if (!order) throw new NotFoundException(`Order ${id} not found`);
-    return order;
+    try {
+      const order = await this.orderModel.findById(id).exec();
+      if (!order) throw new NotFoundException(`Order ${id} not found`);
+      return order;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 
   async update(id: string, updateOrderDto: UpdateOrderDto) {
-    const order = await this.orderModel
-      .findByIdAndUpdate(id, updateOrderDto, { new: true })
-      .exec();
-    if (!order) throw new NotFoundException(`Order ${id} not found`);
-    return order;
+    try {
+      const order = await this.orderModel
+        .findByIdAndUpdate(id, updateOrderDto, { new: true })
+        .exec();
+      if (!order) throw new NotFoundException(`Order ${id} not found`);
+      return order;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string) {
-    const order = await this.orderModel.findByIdAndDelete(id).exec();
-    if (!order) throw new NotFoundException(`Order ${id} not found`);
-    return order;
+    try {
+      const order = await this.orderModel.findByIdAndDelete(id).exec();
+      if (!order) throw new NotFoundException(`Order ${id} not found`);
+      return order;
+    } catch (error) {
+      if (error instanceof Error.CastError) {
+        throw new BadRequestException('Id inválido');
+      }
+      throw error;
+    }
   }
 
   /**
