@@ -53,6 +53,7 @@ services:
       - ./auth-service:/usr/src/app
       - /usr/src/app/node_modules
 
+  # Serviço de Pedidos (3)
   orders-app:
     build:
       context: ./orders-service
@@ -76,6 +77,57 @@ services:
     volumes:
       - orders-data:/data/db
 
+  # Serviço de entrega (4)
+  delivery-app:
+    build:
+      context: ./delivery-service
+      target: development
+    env_file:
+      - ./delivery-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3004:3000"
+    volumes:
+      - ./delivery-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - delivery-db
+
+  delivery-db:
+    image: mongo
+    env_file:
+      - ./delivery-service/.env
+    volumes:
+      - delivery-data:/data/db
+
+  # Serviço de Restaurantes (5)
+  restaurant-app:
+    build:
+      context: ./restaurant-service
+      target: development
+    env_file:
+      - ./restaurant-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3005:3000"
+    volumes:
+      - ./restaurant-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - restaurant-db
+
+  restaurant-db:
+    image: mongo
+    env_file:
+      - ./restaurant-service/.env
+    volumes:
+      - restaurant-data:/data/db
+
+
 volumes:
   users-data:
   orders-data:
+  delivery-data:
+  restaurant-data:
