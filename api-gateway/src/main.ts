@@ -8,7 +8,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('API Gateway')
     .setDescription(
-      'Porta de entrada externa da aplicação. Roteia as requisições para os microsserviços internos (auth-service e user-service).',
+      'Porta de entrada externa da aplicação. Roteia as requisições para os microsserviços internos.',
     )
     .setVersion('1.0')
     .addBearerAuth(
@@ -22,6 +22,9 @@ async function bootstrap() {
     )
     .addTag('Auth', 'Autenticação de usuários')
     .addTag('User', 'Gerenciamento de usuários')
+    .addTag('Restaurant', 'Gerenciamento de restaurantes')
+    .addTag('Orders', 'Gerenciamento de pedidos')
+    .addTag('Delivery', 'Gerenciamento de entregas')
     .build();
 
   const documentFactory = () => SwaggerModule.createDocument(app, config);
