@@ -624,7 +624,8 @@ npm install prom-client
       - "3003:3000"
     volumes:
       - ./menu-service:/usr/src/app
-      - /usr/src/app/node_modules
+      - /usr/src/app/node_modules   # isola node_modules do container
+      - /usr/src/app/dist           # isola dist — evita cache stale do host
     depends_on:
       - menu-db
 
@@ -709,11 +710,15 @@ docker-compose ps
 
 ### Hot reload no Windows
 
-Adicione no `tsconfig.json` de cada serviço para o watch funcionar dentro do Docker:
+Para o watch funcionar dentro do Docker no Windows, o `tsconfig.json` de cada serviço precisa ter o `watchOptions` com polling (eventos de arquivo do Windows não chegam no container Linux):
 
 ```json
 {
-  "compilerOptions": { ... },
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
+    ...
+  },
   "watchOptions": {
     "watchFile": "fixedPollingInterval",
     "watchDirectory": "fixedPollingInterval",
@@ -721,6 +726,17 @@ Adicione no `tsconfig.json` de cada serviço para o watch funcionar dentro do Do
   }
 }
 ```
+
+E o `docker-compose.yml` deve isolar o `dist/` do container do host com um volume anônimo, para evitar que um cache local corrompido impeça a compilação:
+
+```yaml
+volumes:
+  - ./meu-service:/usr/src/app
+  - /usr/src/app/node_modules   # isola node_modules
+  - /usr/src/app/dist           # isola dist — evita cache stale do host
+```
+
+> **Por que isolar o `dist/`?** O TypeScript usa `dist/.tsbuildinfo` como cache incremental. Se esse arquivo existir localmente (com estado de uma compilação anterior), ele é montado no container e o TypeScript pula a compilação — resultando em `Cannot find module '/usr/src/app/dist/main'`. Com o volume anônimo, o `dist/` do container é sempre isolado do host.
 
 ---
 
