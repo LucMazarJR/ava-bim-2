@@ -149,6 +149,30 @@ services:
     volumes:
       - tracking-data:/data/db
 
+  # Serviço de Pagamentos (7)
+  payment-app:
+    build:
+      context: ./payment-service
+      target: development
+    env_file:
+      - ./payment-service/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+    ports:
+      - "3007:3000"
+    volumes:
+      - ./payment-service:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      - payment-db
+
+  payment-db:
+    image: mongo
+    env_file:
+      - ./payment-service/.env
+    volumes:
+      - payment-data:/data/db
+
 
 volumes:
   users-data:
@@ -156,3 +180,4 @@ volumes:
   delivery-data:
   restaurant-data:
   tracking-data:
+  payment-data:
